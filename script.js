@@ -1,12 +1,13 @@
 // script.js — Deeper Than Skin Relaunch (GitHub Pages friendly)
-// Supports:
-// - Countdown (March 10, 2026 @ 10:00 AM ET)
+//
+// Features:
+// - Countdown (LOCKED: March 10, 2026 @ 10:00 AM ET)
 // - Launch date label + status badge
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
-// - Reveal-on-scroll animations (.reveal -> .in)
-// - Early access form handling (Formspree/Airtable/Supabase endpoint OR mailto fallback)
-// - Basic bot honeypot support (#company)
+// - Reveal-on-scroll (.reveal -> .in)
+// - Early access form handling (endpoint optional; mailto fallback)
+// - Honeypot support (#company)
 
 (() => {
   "use strict";
@@ -14,239 +15,178 @@
   // =========================
   // CONFIG
   // =========================
-  // Locked launch: March 10, 2026 @ 10:00 AM ET (DST => -04:00)
+  // NOTE: March 10, 2026 10:00 AM Eastern Time.
+  // DST is in effect by then, so -04:00 is correct.
   const LAUNCH_DATE_ISO = "2026-03-10T10:00:00-04:00";
 
-  // Optional: set to a real endpoint (Formspree / Airtable / Supabase edge function)
-  // Example Formspree: "https://formspree.io/f/xxxxxxx"
+  // Optional: set to a real endpoint (Formspree / Airtable / Supabase edge function).
+  // Leave empty to use mailto fallback.
   const FORM_ENDPOINT = "";
 
-  // Used for mailto fallback if FORM_ENDPOINT is blank
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
 
-  // Storage key for contrast
-  const CONTRAST_STORAGE_KEY = "dts_contrast";
+  // Incentive copy (used in toast + mailto body)
+  const INCENTIVE_LINE =
+    "Bonus: Join the list for a chance to RSVP for our launch pop-up + early access perks.";
 
   // =========================
-  // HELPERS
+  // DOM HELPERS
   // =========================
   const $ = (id) => document.getElementById(id);
 
-  function pad2(n) {
-    return String(n).padStart(2, "0");
-  }
+  const els = {
+    dd: $("dd"),
+    hh: $("hh"),
+    mm: $("mm"),
+    ss: $("ss"),
+    badge: $("statusBadge"),
+    label: $("launchLabel"),
+    pretty: $("launchDatePretty"),
+    year: $("year"),
+    themeToggle: $("themeToggle"),
+    form: $("signupForm"),
+    email: $("email"),
+    company: $("company"),
+    toast: $("toast"),
+  };
 
-  function safeSetText(el, txt) {
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const safeText = (el, txt) => {
     if (el) el.textContent = String(txt);
-  }
+  };
 
-  function canUseStorage() {
-    try {
-      const k = "__t";
-      localStorage.setItem(k, "1");
-      localStorage.removeItem(k);
-      return true;
-    } catch {
-      return false;
+  // Run after DOM is ready (safer for GitHub Pages + any partial loads)
+  const onReady = (fn) => {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    } else {
+      fn();
     }
-  }
+  };
 
-  const HAS_STORAGE = canUseStorage();
+  function showToast(message, ok = true) {
+    if (!els.toast) return;
+    els.toast.style.display = "block";
+    els.toast.textContent = message;
 
-  function showToast(els, message, ok = true) {
-    const t = els.toast;
-    if (!t) return;
-    t.style.display = "block";
-    t.textContent = message;
-
-    t.style.borderColor = ok
+    els.toast.style.borderColor = ok
       ? "rgba(125,224,192,.25)"
       : "rgba(255,120,120,.25)";
-    t.style.background = ok
+    els.toast.style.background = ok
       ? "rgba(125,224,192,.06)"
       : "rgba(255,120,120,.06)";
-    t.style.color = ok ? "rgba(255,255,255,.80)" : "rgba(255,200,200,.88)";
+    els.toast.style.color = ok
+      ? "rgba(255,255,255,.85)"
+      : "rgba(255,200,200,.92)";
   }
 
-  function hideToast(els) {
-    const t = els.toast;
-    if (!t) return;
-    t.style.display = "none";
-    t.textContent = "";
+  function hideToast() {
+    if (!els.toast) return;
+    els.toast.style.display = "none";
+    els.toast.textContent = "";
   }
 
   function prettyLocalDate(iso) {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "TBD";
     try {
-      const fmt = new Intl.DateTimeFormat(undefined, {
+      return new Intl.DateTimeFormat(undefined, {
         weekday: "short",
         month: "short",
         day: "2-digit",
         year: "numeric",
         hour: "numeric",
         minute: "2-digit",
-      });
-      return fmt.format(d);
+      }).format(d);
     } catch {
       return d.toLocaleString();
     }
   }
 
   // =========================
-  // CONTRAST
+  // INIT
   // =========================
-  function isHighContrast() {
-    return document.documentElement.getAttribute("data-contrast") === "high";
-  }
-
-  function applyContrast(mode) {
-    // mode: "high" | "normal"
-    if (mode === "high") {
-      document.documentElement.setAttribute("data-contrast", "high");
-    } else {
-      document.documentElement.removeAttribute("data-contrast");
-    }
-  }
-
-  function loadContrast() {
-    if (!HAS_STORAGE) return "normal";
-    const saved = localStorage.getItem(CONTRAST_STORAGE_KEY);
-    return saved === "high" ? "high" : "normal";
-  }
-
-  function saveContrast(mode) {
-    if (!HAS_STORAGE) return;
-    localStorage.setItem(CONTRAST_STORAGE_KEY, mode === "high" ? "high" : "normal");
-  }
-
-  function syncToggleButton(btn) {
-    if (!btn) return;
-    const high = isHighContrast();
-    btn.setAttribute("aria-pressed", high ? "true" : "false");
-    btn.title = high ? "Contrast: High (click to disable)" : "Contrast: Normal (click to enable)";
-  }
-
-  function wireContrastToggle(btn) {
-    if (!btn) return;
-
-    // ensure button doesn’t accidentally submit forms (in case DOM changes later)
-    if (!btn.getAttribute("type")) btn.setAttribute("type", "button");
-
-    // Apply stored mode first
-    const mode = loadContrast();
-    applyContrast(mode);
-    syncToggleButton(btn);
-
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const next = isHighContrast() ? "normal" : "high";
-      applyContrast(next);
-      saveContrast(next);
-      syncToggleButton(btn);
-    });
-  }
-
-  // =========================
-  // FORM
-  // =========================
-  async function submitToEndpoint(email) {
-    const payload = {
-      email,
-      source: "deeperthanskin-relaunch",
-      intent: "early-access",
-      launchDate: LAUNCH_DATE_ISO,
-      createdAt: new Date().toISOString(),
-    };
-
-    const res = await fetch(FORM_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      let msg = `Request failed (${res.status})`;
-      try {
-        const data = await res.json();
-        if (data?.error) msg = data.error;
-      } catch {}
-      throw new Error(msg);
-    }
-  }
-
-  function mailtoFallback(email) {
-    const body =
-      `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
-      `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
-      `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
-      `Thanks!`;
-
-    const url =
-      `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
-      `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
-      `&body=${body}`;
-
-    window.location.href = url;
-  }
-
-  // =========================
-  // MAIN (DOM READY)
-  // =========================
-  function init() {
-    const els = {
-      dd: $("dd"),
-      hh: $("hh"),
-      mm: $("mm"),
-      ss: $("ss"),
-      badge: $("statusBadge"),
-      label: $("launchLabel"),
-      pretty: $("launchDatePretty"),
-      year: $("year"),
-      themeToggle: $("themeToggle"),
-      form: $("signupForm"),
-      email: $("email"),
-      company: $("company"),
-      toast: $("toast"),
-    };
-
+  onReady(() => {
     // Footer year
-    safeSetText(els.year, String(new Date().getFullYear()));
+    safeText(els.year, new Date().getFullYear());
 
-    // Contrast toggle (fixed)
-    wireContrastToggle(els.themeToggle);
+    // =========================
+    // CONTRAST TOGGLE
+    // =========================
+    const STORAGE_KEY = "dts_contrast";
 
-    // Countdown
+    function setButtonState(isHigh) {
+      if (!els.themeToggle) return;
+      els.themeToggle.setAttribute("aria-pressed", String(isHigh));
+      els.themeToggle.title = isHigh
+        ? "Contrast: High (click to disable)"
+        : "Contrast: Normal (click to enable)";
+      // Optional: swap icon
+      const span = els.themeToggle.querySelector("span");
+      if (span) span.textContent = isHigh ? "◑" : "◐";
+    }
+
+    function applyContrast(isHigh) {
+      // Apply to <html>
+      document.documentElement.toggleAttribute("data-contrast", isHigh);
+      if (isHigh) {
+        document.documentElement.setAttribute("data-contrast", "high");
+      } else {
+        document.documentElement.removeAttribute("data-contrast");
+      }
+      setButtonState(isHigh);
+    }
+
+    // Load saved preference
+    let savedMode = "normal";
+    try {
+      savedMode = localStorage.getItem(STORAGE_KEY) || "normal";
+    } catch {}
+    applyContrast(savedMode === "high");
+
+    // Hook click
+    if (els.themeToggle) {
+      els.themeToggle.type = "button"; // guard against accidental form behavior
+      els.themeToggle.addEventListener("click", () => {
+        const isHigh =
+          document.documentElement.getAttribute("data-contrast") === "high";
+        const nextHigh = !isHigh;
+        applyContrast(nextHigh);
+        try {
+          localStorage.setItem(STORAGE_KEY, nextHigh ? "high" : "normal");
+        } catch {}
+      });
+    }
+
+    // =========================
+    // COUNTDOWN
+    // =========================
     const targetMs = new Date(LAUNCH_DATE_ISO).getTime();
-    safeSetText(els.pretty, prettyLocalDate(LAUNCH_DATE_ISO));
+    safeText(els.pretty, prettyLocalDate(LAUNCH_DATE_ISO));
 
     function setCountdown(d, h, m, s) {
-      safeSetText(els.dd, pad2(d));
-      safeSetText(els.hh, pad2(h));
-      safeSetText(els.mm, pad2(m));
-      safeSetText(els.ss, pad2(s));
+      safeText(els.dd, pad2(d));
+      safeText(els.hh, pad2(h));
+      safeText(els.mm, pad2(m));
+      safeText(els.ss, pad2(s));
     }
 
     function tickCountdown() {
       if (!Number.isFinite(targetMs)) {
-        safeSetText(els.badge, "Coming Soon");
-        safeSetText(els.label, "Launch date TBD");
         setCountdown("--", "--", "--", "--");
+        safeText(els.badge, "Coming Soon");
+        safeText(els.label, "Launch date TBD");
         return;
       }
 
-      const diff = targetMs - Date.now();
+      const now = Date.now();
+      const diff = targetMs - now;
 
       if (diff <= 0) {
-        safeSetText(els.badge, "Now Live");
-        safeSetText(els.label, "We’re live. Welcome back.");
         setCountdown(0, 0, 0, 0);
+        safeText(els.badge, "Now Live");
+        safeText(els.label, "We’re live. Welcome back.");
         return;
       }
 
@@ -257,14 +197,16 @@
       const secs = totalSeconds % 60;
 
       setCountdown(days, hours, mins, secs);
-      safeSetText(els.badge, "Coming Soon");
-      safeSetText(els.label, "New experience begins soon");
+      safeText(els.badge, "Coming Soon");
+      safeText(els.label, "New experience begins March 10");
     }
 
     tickCountdown();
-    setInterval(tickCountdown, 1000);
+    window.setInterval(tickCountdown, 1000);
 
-    // Reveal on scroll
+    // =========================
+    // REVEAL ON SCROLL
+    // =========================
     const revealEls = Array.from(document.querySelectorAll(".reveal"));
     if (revealEls.length) {
       const reduceMotion =
@@ -291,24 +233,68 @@
       }
     }
 
-    // Form submit
+    // =========================
+    // FORM SUBMIT
+    // =========================
+    async function submitToEndpoint(email) {
+      const payload = {
+        email,
+        source: "deeperthanskin-relaunch",
+        intent: "early-access",
+        incentive: "pop-up RSVP chance",
+        launchDate: LAUNCH_DATE_ISO,
+        createdAt: new Date().toISOString(),
+      };
+
+      const res = await fetch(FORM_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data?.error) msg = data.error;
+        } catch {}
+        throw new Error(msg);
+      }
+    }
+
+    function mailtoFallback(email) {
+      const body =
+        `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
+        `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
+        `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
+        `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
+        `Thanks!`;
+
+      const url =
+        `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
+        `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
+        `&body=${body}`;
+
+      window.location.href = url;
+    }
+
     if (els.form) {
       els.form.addEventListener("submit", async (ev) => {
         ev.preventDefault();
-        hideToast(els);
+        hideToast();
 
         const email = (els.email?.value || "").trim();
         const honey = (els.company?.value || "").trim();
 
         // Honeypot: if filled, silently "succeed"
         if (honey) {
-          showToast(els, "Thanks! You’re on the list.", true);
+          showToast("Thanks! You’re on the list.", true);
           try { els.form.reset(); } catch {}
           return;
         }
 
         if (!email || !email.includes("@")) {
-          showToast(els, "Please enter a valid email address.", false);
+          showToast("Please enter a valid email address.", false);
           els.email?.focus?.();
           return;
         }
@@ -323,14 +309,20 @@
         try {
           if (FORM_ENDPOINT) {
             await submitToEndpoint(email);
-            showToast(els, "You’re in. We’ll email you early access updates.", true);
+            showToast(
+              `You’re in. We’ll email launch updates. ${INCENTIVE_LINE}`,
+              true
+            );
             try { els.form.reset(); } catch {}
           } else {
-            showToast(els, "Opening your email app to confirm signup…", true);
+            showToast(
+              `Opening your email app to confirm signup… ${INCENTIVE_LINE}`,
+              true
+            );
             mailtoFallback(email);
           }
         } catch {
-          showToast(els, "Signup didn’t go through. Try again or email us directly.", false);
+          showToast("Signup didn’t go through. Try again or email us directly.", false);
         } finally {
           if (btn) {
             btn.disabled = false;
@@ -339,12 +331,5 @@
         }
       });
     }
-  }
-
-  // DOM-ready guard (fixes toggle reliability)
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init, { once: true });
-  } else {
-    init();
-  }
+  });
 })();
