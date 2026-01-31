@@ -1,9 +1,9 @@
 /* styles.css — Deeper Than Skin Relaunch (FULL DROP-IN)
-   Refactor notes (baked in, no extra work needed):
-   - Completed truncated footer media query and missing footer styles
-   - Added .foot-left / .foot-right / .foot-brand / .brand-dot / links + credit styling
-   - Kept your visual system intact (tokens, layout, glass, gradients)
-   - Added reveal animation + reduced-motion safety
+   - Consolidated duplicate credit styles
+   - Tightened contrast selector to :root[data-contrast="high"]
+   - Completed footer layout + mobile behavior
+   - Kept your tokens + glass + gradients intact
+   - Reveal animation + reduced-motion safety
 */
 
 :root{
@@ -26,7 +26,8 @@
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
-[data-contrast="high"]{
+/* Contrast mode toggled by JS on <html> */
+:root[data-contrast="high"]{
   --panel: rgba(255,255,255,.09);
   --panel2: rgba(255,255,255,.12);
   --line: rgba(255,255,255,.22);
@@ -39,10 +40,11 @@ html, body{ height:100%; }
 body{
   margin:0;
   color:var(--text);
-  background: radial-gradient(1200px 600px at 20% 0%, rgba(125,224,192,.18), transparent 60%),
-              radial-gradient(1000px 700px at 90% 10%, rgba(199,183,255,.12), transparent 55%),
-              radial-gradient(900px 600px at 50% 100%, rgba(255,255,255,.05), transparent 60%),
-              var(--bg);
+  background:
+    radial-gradient(1200px 600px at 20% 0%, rgba(125,224,192,.18), transparent 60%),
+    radial-gradient(1000px 700px at 90% 10%, rgba(199,183,255,.12), transparent 55%),
+    radial-gradient(900px 600px at 50% 100%, rgba(255,255,255,.05), transparent 60%),
+    var(--bg);
   font-family: var(--sans);
   letter-spacing: -0.01em;
   overflow-x:hidden;
@@ -55,52 +57,17 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   border-radius: 10px;
 }
 
-/* Background layers */
+/* =========================
+   BACKGROUND LAYERS
+========================= */
 .bg{ position:fixed; inset:0; z-index:-1; }
+
 .noise{
   position:absolute; inset:0;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
   mix-blend-mode: overlay;
   opacity:.20;
   pointer-events:none;
-}
-.credit{
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--faint);
-}
-
-.credit-link{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.03);
-  color: rgba(255,255,255,.82);
-  transition: transform .12s ease, border-color .2s ease, background .2s ease;
-}
-
-.credit-link:hover{
-  transform: translateY(-1px);
-  border-color: rgba(255,255,255,.22);
-  background: rgba(255,255,255,.05);
-}
-
-.credit-logo{
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  display: block;
-  object-fit: contain;
-  /* if the logo is dark on transparent, this helps on dark UI */
-  filter: invert(1);
-  opacity: .92;
-}
-
-.credit-link:hover .credit-logo{
-  opacity: 1;
 }
 
 .grid{
@@ -112,6 +79,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   mask-image: radial-gradient(circle at 40% 25%, rgba(0,0,0,1), rgba(0,0,0,.1) 55%, transparent 75%);
   opacity:.18;
 }
+
 .orb{
   position:absolute;
   width:520px; height:520px;
@@ -120,26 +88,34 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   opacity:.25;
   transform: translate3d(0,0,0);
 }
+
 .orb1{
   left:-160px; top:-160px;
   background: radial-gradient(circle at 30% 30%, rgba(125,224,192,.75), transparent 60%);
   animation: float1 12s ease-in-out infinite;
 }
+
 .orb2{
   right:-220px; top:40px;
   background: radial-gradient(circle at 40% 35%, rgba(199,183,255,.7), transparent 60%);
   animation: float2 14s ease-in-out infinite;
 }
+
 @keyframes float1{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(18px) } }
 @keyframes float2{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-16px) } }
 
+/* =========================
+   LAYOUT WRAP
+========================= */
 .wrap{
   width:min(1120px, 92vw);
   margin: 0 auto;
   padding: 92px 0 48px;
 }
 
-/* Nav */
+/* =========================
+   NAV
+========================= */
 .nav{
   position: sticky;
   top: 0;
@@ -148,6 +124,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   border-bottom: 1px solid rgba(255,255,255,.08);
   z-index: 50;
 }
+
 .nav-inner{
   width:min(1120px, 92vw);
   margin:0 auto;
@@ -156,11 +133,13 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   justify-content:space-between;
   padding: 14px 0;
 }
+
 .brand{
   display:flex; align-items:center; gap:12px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+
 .brand-logo{
   width: 26px;
   height: 26px;
@@ -168,9 +147,11 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   object-fit: cover;
   box-shadow: var(--glow);
 }
+
 .brand-text{ opacity:.95; }
 
 .nav-actions{ display:flex; gap:10px; align-items:center; }
+
 .chip{
   padding: 10px 12px;
   border-radius: 999px;
@@ -179,6 +160,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: 13px;
   color: var(--muted);
 }
+
 .icon-btn{
   border: 1px solid var(--line);
   background: rgba(255,255,255,.03);
@@ -188,13 +170,16 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   cursor:pointer;
 }
 
-/* Hero */
+/* =========================
+   HERO
+========================= */
 .hero{
   display:grid;
   grid-template-columns: 1.2fr .8fr;
   gap: 22px;
   padding-top: 22px;
 }
+
 @media (max-width: 980px){
   .hero{ grid-template-columns: 1fr; }
   .wrap{ padding-top: 70px; }
@@ -212,6 +197,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: 13px;
   width: fit-content;
 }
+
 .kicker::before{
   content:"";
   width:8px; height:8px;
@@ -228,6 +214,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: clamp(40px, 5.3vw, 62px);
   margin: 16px 0 14px;
 }
+
 .headline-quiet{
   background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,.68));
   -webkit-background-clip: text;
@@ -242,6 +229,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   max-width: 62ch;
   margin: 0 0 18px;
 }
+
 .subhead strong{
   color: rgba(255,255,255,.88);
   font-weight: 650;
@@ -264,17 +252,21 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   transition: transform .12s ease, background .2s ease, border-color .2s ease;
   user-select:none;
 }
+
 .btn:hover{ transform: translateY(-1px); border-color: rgba(255,255,255,.22); }
+
 .btn.primary{
   background: linear-gradient(135deg, rgba(125,224,192,.95), rgba(199,183,255,.95));
   color: rgba(7,11,16,.92);
   border-color: rgba(255,255,255,.22);
   box-shadow: var(--shadow);
 }
+
 .btn.ghost{
   background: rgba(255,255,255,.02);
   color: var(--muted);
 }
+
 .w100{ width:100%; }
 
 .trust{
@@ -283,6 +275,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   gap: 10px 12px;
   margin-top: 18px;
 }
+
 .trust-item{
   display:flex;
   align-items:center;
@@ -294,13 +287,16 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   color: var(--muted);
   font-size: 13px;
 }
+
 .dot{
   width: 8px; height: 8px;
   border-radius: 99px;
   background: rgba(255,255,255,.35);
 }
 
-/* Cards */
+/* =========================
+   CARDS
+========================= */
 .glass{
   background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.04));
   border: 1px solid rgba(255,255,255,.14);
@@ -310,23 +306,27 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 }
 
 .card{ padding: 18px; }
+
 .card-top{
   display:flex;
   justify-content:space-between;
   align-items:flex-start;
   gap:12px;
 }
+
 .card-title{
   margin:0;
   font-weight: 750;
   letter-spacing: -0.02em;
 }
+
 .card-subtitle{
   margin:6px 0 0;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.4;
 }
+
 .badge{
   padding: 7px 10px;
   border-radius: 999px;
@@ -343,6 +343,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   gap: 10px;
   margin-top: 14px;
 }
+
 .timebox{
   border-radius: var(--radius2);
   border: 1px solid rgba(255,255,255,.12);
@@ -350,11 +351,13 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   padding: 12px 10px;
   text-align:center;
 }
+
 .num{
   font-size: 26px;
   font-weight: 850;
   letter-spacing: -0.03em;
 }
+
 .lbl{
   margin-top: 4px;
   font-size: 12px;
@@ -368,6 +371,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 }
 
 .mini{ display:grid; gap:8px; }
+
 .mini-row{
   display:flex;
   justify-content:space-between;
@@ -375,6 +379,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   color: var(--muted);
   font-size: 13px;
 }
+
 .mini-val{ color: rgba(255,255,255,.82); }
 
 .card-actions{ display:grid; gap:10px; margin-top: 14px; }
@@ -385,6 +390,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   gap:10px;
   margin-top: 12px;
 }
+
 .pill{
   padding: 10px 12px;
   border-radius: 999px;
@@ -394,14 +400,18 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: 13px;
 }
 
-/* Sections */
+/* =========================
+   SECTIONS
+========================= */
 .section{ padding: 54px 0 0; }
+
 .section-head h2{
   font-family: var(--serif);
   margin: 0 0 8px;
   font-size: 34px;
   letter-spacing: -0.02em;
 }
+
 .section-head p{
   margin: 0;
   color: var(--muted);
@@ -414,6 +424,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   gap: 14px;
   margin-top: 18px;
 }
+
 @media (max-width: 980px){
   .grid-3{ grid-template-columns: 1fr; }
 }
@@ -425,27 +436,33 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   padding: 18px;
   transition: transform .14s ease, border-color .2s ease;
 }
+
 .tile:hover{
   transform: translateY(-2px);
   border-color: rgba(255,255,255,.22);
 }
+
 .tile h3{
   margin: 0 0 8px;
   letter-spacing:-0.02em;
 }
+
 .tile p{
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
 }
 
-/* Split section */
+/* =========================
+   SPLIT (EARLY ACCESS)
+========================= */
 .split{
   display:grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
   align-items:start;
 }
+
 @media (max-width: 980px){
   .split{ grid-template-columns: 1fr; }
 }
@@ -455,11 +472,13 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: 34px;
   margin: 0 0 10px;
 }
+
 .split-left p{
   color: var(--muted);
   line-height:1.6;
   margin: 0 0 14px;
 }
+
 .bullets{
   margin:0;
   padding:0;
@@ -467,11 +486,13 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   display:grid;
   gap:10px;
 }
+
 .bullets li{
   display:flex;
   gap:10px;
   color: var(--muted);
 }
+
 .check{
   width: 22px; height: 22px;
   border-radius: 8px;
@@ -485,19 +506,23 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 }
 
 .form{ padding: 18px; }
+
 .label{
   display:block;
   font-size: 13px;
   color: var(--muted);
   margin-bottom: 8px;
 }
+
 .input-row{
   display:flex;
   gap:10px;
 }
+
 @media (max-width: 520px){
   .input-row{ flex-direction:column; }
 }
+
 input[type="email"]{
   width: 100%;
   border-radius: 14px;
@@ -507,6 +532,7 @@ input[type="email"]{
   padding: 12px 12px;
   font-size: 15px;
 }
+
 .hp{
   position:absolute;
   left:-9999px;
@@ -521,12 +547,15 @@ input[type="email"]{
   font-size: 12px;
   line-height:1.5;
 }
+
 .form-actions{ margin-top: 12px; }
+
 .hint{
   color: var(--faint);
   font-size: 12px;
   margin: 0;
 }
+
 .toast{
   margin-top: 12px;
   padding: 12px;
@@ -537,16 +566,20 @@ input[type="email"]{
   display:none;
 }
 
-/* Contact */
+/* =========================
+   CONTACT
+========================= */
 .contact-row{
   display:grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-top: 18px;
 }
+
 @media (max-width: 980px){
   .contact-row{ grid-template-columns: 1fr; }
 }
+
 .contact-card{
   border-radius: var(--radius);
   border: 1px solid rgba(255,255,255,.12);
@@ -557,10 +590,12 @@ input[type="email"]{
   align-items:center;
   transition: transform .14s ease, border-color .2s ease;
 }
+
 .contact-card:hover{
   transform: translateY(-2px);
   border-color: rgba(255,255,255,.22);
 }
+
 .contact-ico{
   width: 42px; height: 42px;
   border-radius: 16px;
@@ -571,6 +606,7 @@ input[type="email"]{
   border: 1px solid rgba(255,255,255,.10);
   color: rgba(255,255,255,.82);
 }
+
 .social-ico{
   width: 20px;
   height: 20px;
@@ -578,16 +614,20 @@ input[type="email"]{
   filter: invert(1);
   opacity: .92;
 }
+
 .contact-card:hover .social-ico{ opacity: 1; }
 
 .contact-title{ font-weight: 750; letter-spacing:-0.02em; }
 .contact-sub{ color: var(--muted); font-size: 13px; margin-top: 2px; }
 
-/* Footer */
+/* =========================
+   FOOTER
+========================= */
 .footer{
   padding: 46px 0 10px;
   color: var(--muted);
 }
+
 .footer-inner{
   display:flex;
   justify-content:space-between;
@@ -596,11 +636,14 @@ input[type="email"]{
   border-top: 1px solid rgba(255,255,255,.10);
   padding-top: 16px;
 }
+
 @media (max-width: 720px){
   .footer-inner{ flex-direction:column; }
   .foot-right{ justify-content:flex-start; }
 }
+
 .foot-left{ max-width: 60ch; }
+
 .foot-brand{
   display:flex;
   align-items:center;
@@ -609,23 +652,27 @@ input[type="email"]{
   color: rgba(255,255,255,.86);
   letter-spacing: -0.02em;
 }
+
 .brand-dot{
   width: 10px; height: 10px;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(125,224,192,1), rgba(199,183,255,1));
   box-shadow: var(--glow);
 }
+
 .foot-note{
   margin: 10px 0 0;
   color: var(--faint);
   font-size: 12px;
   line-height: 1.5;
 }
+
 .foot-right{
   display:flex;
   gap: 10px;
   flex-wrap:wrap;
 }
+
 .foot-link{
   padding: 8px 10px;
   border-radius: 12px;
@@ -635,30 +682,59 @@ input[type="email"]{
   font-size: 13px;
   transition: border-color .2s ease, transform .12s ease, background .2s ease;
 }
+
 .foot-link:hover{
   transform: translateY(-1px);
   border-color: rgba(255,255,255,.22);
   background: rgba(255,255,255,.03);
 }
 
-/* SmashPro credit */
+/* =========================
+   SMASHPRO CREDIT (single source of truth)
+========================= */
 .credit{
   margin: 10px 0 0;
-  color: var(--faint);
   font-size: 12px;
+  color: var(--faint);
   line-height: 1.5;
 }
 .credit[data-credit="off"]{ display:none; }
+
+/* pill-style link that can include an <img class="credit-logo"> */
 .credit-link{
-  color: rgba(255,255,255,.80);
-  border-bottom: 1px solid rgba(255,255,255,.22);
-}
-.credit-link:hover{
-  color: rgba(255,255,255,.92);
-  border-bottom-color: rgba(255,255,255,.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
+  color: rgba(255,255,255,.82);
+  transition: transform .12s ease, border-color .2s ease, background .2s ease;
 }
 
-/* Reveal animation */
+.credit-link:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.05);
+  color: rgba(255,255,255,.92);
+}
+
+.credit-logo{
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  display: block;
+  object-fit: contain;
+  filter: invert(1);
+  opacity: .92;
+}
+
+.credit-link:hover .credit-logo{ opacity: 1; }
+
+/* =========================
+   REVEAL ANIMATION
+========================= */
 .reveal{
   opacity: 0;
   transform: translateY(10px);
@@ -669,9 +745,13 @@ input[type="email"]{
   transform: translateY(0);
 }
 
-/* Reduce motion */
+/* =========================
+   REDUCED MOTION
+========================= */
 @media (prefers-reduced-motion: reduce){
   .reveal{ opacity:1; transform:none; transition:none; }
   .orb1, .orb2{ animation:none; }
-  .btn:hover, .tile:hover, .contact-card:hover, .foot-link:hover{ transform:none; }
+  .btn:hover, .tile:hover, .contact-card:hover, .foot-link:hover, .credit-link:hover{
+    transform:none;
+  }
 }
