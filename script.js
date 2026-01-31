@@ -1,161 +1,544 @@
-// ---------------------------
-// CONFIG (edit these)
-// ---------------------------
+:root{
+  --bg:#070b10;
+  --panel: rgba(255,255,255,.06);
+  --panel2: rgba(255,255,255,.08);
+  --text: rgba(255,255,255,.92);
+  --muted: rgba(255,255,255,.70);
+  --faint: rgba(255,255,255,.50);
+  --line: rgba(255,255,255,.14);
+  --glow: 0 0 40px rgba(120, 220, 180, .12);
+  --accent: #7de0c0;
+  --accent2:#c7b7ff;
+  --shadow: 0 18px 55px rgba(0,0,0,.55);
 
-// Set your launch date/time (America/New_York offset included):
-// Example: March 15, 2026 10:00 AM ET => "2026-03-15T10:00:00-05:00"
-const LAUNCH_DATE = "2026-03-15T10:00:00-05:00";
+  --radius: 22px;
+  --radius2: 16px;
 
-// Optional: Form endpoint. If blank, it will fall back to mailto.
-// Formspree example: "https://formspree.io/f/xxxxxxx"
-const FORM_ENDPOINT = "";
-
-// ---------------------------
-// Helpers
-// ---------------------------
-const $ = (id) => document.getElementById(id);
-
-function pad2(n){ return String(n).padStart(2, "0"); }
-
-function prettyDate(iso){
-  try{
-    const d = new Date(iso);
-    const fmt = new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "numeric",
-      minute: "2-digit"
-    });
-    return fmt.format(d);
-  } catch {
-    return "TBD";
-  }
+  --serif: "Fraunces", ui-serif, Georgia, serif;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
 
-function setToast(msg, ok=true){
-  const t = $("toast");
-  if (!t) return;
-  t.style.display = "block";
-  t.textContent = msg;
-  t.style.borderColor = ok ? "rgba(125,224,192,.25)" : "rgba(255,120,120,.25)";
-  t.style.background = ok ? "rgba(125,224,192,.06)" : "rgba(255,120,120,.06)";
+[data-contrast="high"]{
+  --panel: rgba(255,255,255,.09);
+  --panel2: rgba(255,255,255,.12);
+  --line: rgba(255,255,255,.22);
+  --muted: rgba(255,255,255,.78);
 }
 
-// ---------------------------
-// Countdown
-// ---------------------------
-const target = new Date(LAUNCH_DATE).getTime();
-$("launchDatePretty").textContent = prettyDate(LAUNCH_DATE);
+*{ box-sizing:border-box; }
+html, body{ height:100%; }
 
-function tick(){
-  const now = Date.now();
-  let diff = target - now;
-
-  const badge = $("statusBadge");
-  const label = $("launchLabel");
-
-  if (!Number.isFinite(diff)) {
-    $("dd").textContent = "--";
-    $("hh").textContent = "--";
-    $("mm").textContent = "--";
-    $("ss").textContent = "--";
-    if (badge) badge.textContent = "Coming Soon";
-    if (label) label.textContent = "Launch date TBD";
-    return;
-  }
-
-  if (diff <= 0){
-    $("dd").textContent = "00";
-    $("hh").textContent = "00";
-    $("mm").textContent = "00";
-    $("ss").textContent = "00";
-    if (badge) badge.textContent = "Now Live";
-    if (label) label.textContent = "We’re live. Welcome back.";
-    return;
-  }
-
-  const sec = Math.floor(diff / 1000);
-  const days = Math.floor(sec / (3600 * 24));
-  const hours = Math.floor((sec % (3600 * 24)) / 3600);
-  const mins = Math.floor((sec % 3600) / 60);
-  const secs = sec % 60;
-
-  $("dd").textContent = pad2(days);
-  $("hh").textContent = pad2(hours);
-  $("mm").textContent = pad2(mins);
-  $("ss").textContent = pad2(secs);
-
-  if (badge) badge.textContent = "Coming Soon";
-  if (label) label.textContent = "New experience begins soon";
+body{
+  margin:0;
+  color:var(--text);
+  background: radial-gradient(1200px 600px at 20% 0%, rgba(125,224,192,.18), transparent 60%),
+              radial-gradient(1000px 700px at 90% 10%, rgba(199,183,255,.12), transparent 55%),
+              radial-gradient(900px 600px at 50% 100%, rgba(255,255,255,.05), transparent 60%),
+              var(--bg);
+  font-family: var(--sans);
+  letter-spacing: -0.01em;
+  overflow-x:hidden;
 }
 
-tick();
-setInterval(tick, 1000);
+a{ color: inherit; text-decoration:none; }
+a:focus-visible, button:focus-visible, input:focus-visible{
+  outline: 3px solid rgba(125,224,192,.55);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
 
-// ---------------------------
-// Reveal on scroll
-// ---------------------------
-const io = new IntersectionObserver((entries)=>{
-  entries.forEach(e=>{
-    if (e.isIntersecting) e.target.classList.add("in");
-  });
-}, { threshold: 0.12 });
+/* Background layers */
+.bg{ position:fixed; inset:0; z-index:-1; }
+.noise{
+  position:absolute; inset:0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+  opacity:.20;
+  pointer-events:none;
+}
+.grid{
+  position:absolute; inset:-2px;
+  background:
+    linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(circle at 40% 25%, rgba(0,0,0,1), rgba(0,0,0,.1) 55%, transparent 75%);
+  opacity:.18;
+}
+.orb{
+  position:absolute;
+  width:520px; height:520px;
+  border-radius: 999px;
+  filter: blur(22px);
+  opacity:.25;
+  transform: translate3d(0,0,0);
+}
+.orb1{
+  left:-160px; top:-160px;
+  background: radial-gradient(circle at 30% 30%, rgba(125,224,192,.75), transparent 60%);
+  animation: float1 12s ease-in-out infinite;
+}
+.orb2{
+  right:-220px; top:40px;
+  background: radial-gradient(circle at 40% 35%, rgba(199,183,255,.7), transparent 60%);
+  animation: float2 14s ease-in-out infinite;
+}
+@keyframes float1{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(18px) } }
+@keyframes float2{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-16px) } }
 
-document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+.wrap{
+  width:min(1120px, 92vw);
+  margin: 0 auto;
+  padding: 92px 0 48px;
+}
 
-// ---------------------------
-// Contrast toggle
-// ---------------------------
-const themeToggle = $("themeToggle");
-const saved = localStorage.getItem("contrast") || "";
-if (saved) document.documentElement.setAttribute("data-contrast", saved);
+/* Nav */
+.nav{
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(12px);
+  background: linear-gradient(to bottom, rgba(7,11,16,.78), rgba(7,11,16,.18));
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  z-index: 50;
+}
+.nav-inner{
+  width:min(1120px, 92vw);
+  margin:0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 14px 0;
+}
+.brand{
+  display:flex; align-items:center; gap:12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.brand-logo{
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: var(--glow);
+}
+.brand-text{ opacity:.95; }
 
-themeToggle?.addEventListener("click", ()=>{
-  const current = document.documentElement.getAttribute("data-contrast");
-  const next = current === "high" ? "" : "high";
-  if (next) document.documentElement.setAttribute("data-contrast", next);
-  else document.documentElement.removeAttribute("data-contrast");
-  localStorage.setItem("contrast", next);
-});
+.nav-actions{ display:flex; gap:10px; align-items:center; }
+.chip{
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  font-size: 13px;
+  color: var(--muted);
+}
+.icon-btn{
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  border-radius: 12px;
+  width: 40px; height: 40px;
+  cursor:pointer;
+}
 
-// ---------------------------
-// Signup form
-// ---------------------------
-$("year").textContent = String(new Date().getFullYear());
+/* Hero */
+.hero{
+  display:grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap: 22px;
+  padding-top: 22px;
+}
+@media (max-width: 980px){
+  .hero{ grid-template-columns: 1fr; }
+  .wrap{ padding-top: 70px; }
+}
 
-const form = $("signupForm");
-form?.addEventListener("submit", async (e)=>{
-  e.preventDefault();
-  const email = $("email").value.trim();
+.kicker{
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-size: 13px;
+  width: fit-content;
+}
+.kicker::before{
+  content:"";
+  width:8px; height:8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 18px rgba(125,224,192,.45);
+}
 
-  if (!email){
-    setToast("Please enter an email address.", false);
-    return;
-  }
+.headline{
+  font-family: var(--serif);
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-size: clamp(40px, 5.3vw, 62px);
+  margin: 16px 0 14px;
+}
+.headline-quiet{
+  background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,.68));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
-  // If endpoint is set, POST to it
-  if (FORM_ENDPOINT){
-    try{
-      const res = await fetch(FORM_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify({ email, source: "deeperthanskin-relaunch" })
-      });
+.subhead{
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.7;
+  max-width: 62ch;
+  margin: 0 0 18px;
+}
+.subhead strong{
+  color: rgba(255,255,255,.88);
+  font-weight: 650;
+}
 
-      if (!res.ok) throw new Error("Request failed");
-      setToast("You’re in. Early access updates will land here ✅");
-      form.reset();
-      return;
-    } catch {
-      setToast("Couldn’t submit right now. Try again or use contact email below.", false);
-      return;
-    }
-  }
+.cta-row{ display:flex; gap: 10px; flex-wrap:wrap; }
 
-  // Fallback to mailto
-  const subj = encodeURIComponent("Early Access: Deeper Than Skin Relaunch");
-  const body = encodeURIComponent(`Please add me to the early access list.\n\nEmail: ${email}\n`);
-  window.location.href = `mailto:info@deeperthanskin.store?subject=${subj}&body=${body}`;
-});
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  color: var(--text);
+  font-weight: 650;
+  cursor:pointer;
+  transition: transform .12s ease, background .2s ease, border-color .2s ease;
+  user-select:none;
+}
+.btn:hover{ transform: translateY(-1px); border-color: rgba(255,255,255,.22); }
+.btn.primary{
+  background: linear-gradient(135deg, rgba(125,224,192,.95), rgba(199,183,255,.95));
+  color: rgba(7,11,16,.92);
+  border-color: rgba(255,255,255,.22);
+  box-shadow: var(--shadow);
+}
+.btn.ghost{
+  background: rgba(255,255,255,.02);
+  color: var(--muted);
+}
+.w100{ width:100%; }
+
+.trust{
+  display:flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 18px;
+}
+.trust-item{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-size: 13px;
+}
+.dot{
+  width: 8px; height: 8px;
+  border-radius: 99px;
+  background: rgba(255,255,255,.35);
+}
+
+/* Cards */
+.glass{
+  background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.04));
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.card{ padding: 18px; }
+.card-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.card-title{
+  margin:0;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+.card-subtitle{
+  margin:6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.badge{
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.04);
+  color: var(--muted);
+  font-size: 12px;
+  white-space:nowrap;
+}
+
+.countdown{
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+.timebox{
+  border-radius: var(--radius2);
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  padding: 12px 10px;
+  text-align:center;
+}
+.num{
+  font-size: 26px;
+  font-weight: 850;
+  letter-spacing: -0.03em;
+}
+.lbl{
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.divider{
+  height: 1px;
+  background: rgba(255,255,255,.10);
+  margin: 14px 0;
+}
+
+.mini{ display:grid; gap:8px; }
+.mini-row{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.mini-val{ color: rgba(255,255,255,.82); }
+
+.card-actions{ display:grid; gap:10px; margin-top: 14px; }
+
+.skill-row{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top: 12px;
+}
+.pill{
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Sections */
+.section{ padding: 54px 0 0; }
+.section-head h2{
+  font-family: var(--serif);
+  margin: 0 0 8px;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+}
+.section-head p{
+  margin: 0;
+  color: var(--muted);
+  line-height:1.6;
+}
+
+.grid-3{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+@media (max-width: 980px){
+  .grid-3{ grid-template-columns: 1fr; }
+}
+
+.tile{
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  padding: 18px;
+  transition: transform .14s ease, border-color .2s ease;
+}
+.tile:hover{
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.22);
+}
+.tile h3{
+  margin: 0 0 8px;
+  letter-spacing:-0.02em;
+}
+.tile p{
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* Split section */
+.split{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items:start;
+}
+@media (max-width: 980px){
+  .split{ grid-template-columns: 1fr; }
+}
+
+.split-left h2{
+  font-family: var(--serif);
+  font-size: 34px;
+  margin: 0 0 10px;
+}
+.split-left p{
+  color: var(--muted);
+  line-height:1.6;
+  margin: 0 0 14px;
+}
+.bullets{
+  margin:0;
+  padding:0;
+  list-style:none;
+  display:grid;
+  gap:10px;
+}
+.bullets li{
+  display:flex;
+  gap:10px;
+  color: var(--muted);
+}
+.check{
+  width: 22px; height: 22px;
+  border-radius: 8px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(125,224,192,.14);
+  border: 1px solid rgba(125,224,192,.25);
+  color: rgba(125,224,192,.95);
+  flex: 0 0 auto;
+}
+
+.form{ padding: 18px; }
+.label{
+  display:block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.input-row{
+  display:flex;
+  gap:10px;
+}
+@media (max-width: 520px){
+  .input-row{ flex-direction:column; }
+}
+input[type="email"]{
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.18);
+  color: var(--text);
+  padding: 12px 12px;
+  font-size: 15px;
+}
+.hp{
+  position:absolute;
+  left:-9999px;
+  width:1px;
+  height:1px;
+  opacity:0;
+}
+
+.fineprint{
+  margin: 10px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height:1.5;
+}
+.form-actions{ margin-top: 12px; }
+.hint{
+  color: var(--faint);
+  font-size: 12px;
+  margin: 0;
+}
+.toast{
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  color: var(--muted);
+  display:none;
+}
+
+/* Contact */
+.contact-row{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 18px;
+}
+@media (max-width: 980px){
+  .contact-row{ grid-template-columns: 1fr; }
+}
+.contact-card{
+  border-radius: var(--radius);
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.03);
+  padding: 16px;
+  display:flex;
+  gap:12px;
+  align-items:center;
+  transition: transform .14s ease, border-color .2s ease;
+}
+.contact-card:hover{
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,.22);
+}
+.contact-ico{
+  width: 42px; height: 42px;
+  border-radius: 16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.10);
+  color: rgba(255,255,255,.82);
+}
+.contact-title{ font-weight: 750; letter-spacing:-0.02em; }
+.contact-sub{ color: var(--muted); font-size: 13px; margin-top: 2px; }
+
+/* Footer */
+.footer{
+  padding: 46px 0 10px;
+  color: var(--muted);
+}
+.footer-inner{
+  display:flex;
+  justify-content:space-between;
+  gap: 18px;
+  align-items:flex-start;
+  border-top: 1px solid rgba(255,255,255,.10);
+  padding-top: 16px;
+}
+@media (max-width: 720px){
+  .footer-inner{ flex-direction
