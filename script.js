@@ -1,544 +1,321 @@
-:root{
-  --bg:#070b10;
-  --panel: rgba(255,255,255,.06);
-  --panel2: rgba(255,255,255,.08);
-  --text: rgba(255,255,255,.92);
-  --muted: rgba(255,255,255,.70);
-  --faint: rgba(255,255,255,.50);
-  --line: rgba(255,255,255,.14);
-  --glow: 0 0 40px rgba(120, 220, 180, .12);
-  --accent: #7de0c0;
-  --accent2:#c7b7ff;
-  --shadow: 0 18px 55px rgba(0,0,0,.55);
+// script.js — Deeper Than Skin Relaunch (GitHub Pages friendly)
+// Supports:
+// - Countdown (March 10, 2026 @ 10:00 AM ET)
+// - Launch date label + status badge
+// - Footer year
+// - Contrast toggle (data-contrast="high") with localStorage persistence
+// - Reveal-on-scroll animations (.reveal -> .in)
+// - Early access form handling (Formspree/Airtable/Supabase endpoint OR mailto fallback)
+// - Basic bot honeypot support (#company)
 
-  --radius: 22px;
-  --radius2: 16px;
+(() => {
+  "use strict";
 
-  --serif: "Fraunces", ui-serif, Georgia, serif;
-  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-}
+  // =========================
+  // CONFIG
+  // =========================
+  // Locked launch: March 10, 2026 @ 10:00 AM ET (DST => -04:00)
+  const LAUNCH_DATE_ISO = "2026-03-10T10:00:00-04:00";
 
-[data-contrast="high"]{
-  --panel: rgba(255,255,255,.09);
-  --panel2: rgba(255,255,255,.12);
-  --line: rgba(255,255,255,.22);
-  --muted: rgba(255,255,255,.78);
-}
+  // Optional: set to a real endpoint (Formspree / Airtable / Supabase edge function)
+  // Example Formspree: "https://formspree.io/f/xxxxxxx"
+  const FORM_ENDPOINT = "";
 
-*{ box-sizing:border-box; }
-html, body{ height:100%; }
+  // Used for mailto fallback if FORM_ENDPOINT is blank
+  const CONTACT_EMAIL = "info@deeperthanskin.store";
+  const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
 
-body{
-  margin:0;
-  color:var(--text);
-  background: radial-gradient(1200px 600px at 20% 0%, rgba(125,224,192,.18), transparent 60%),
-              radial-gradient(1000px 700px at 90% 10%, rgba(199,183,255,.12), transparent 55%),
-              radial-gradient(900px 600px at 50% 100%, rgba(255,255,255,.05), transparent 60%),
-              var(--bg);
-  font-family: var(--sans);
-  letter-spacing: -0.01em;
-  overflow-x:hidden;
-}
+  // =========================
+  // DOM HELPERS
+  // =========================
+  const $ = (id) => document.getElementById(id);
 
-a{ color: inherit; text-decoration:none; }
-a:focus-visible, button:focus-visible, input:focus-visible{
-  outline: 3px solid rgba(125,224,192,.55);
-  outline-offset: 3px;
-  border-radius: 10px;
-}
+  const els = {
+    dd: $("dd"),
+    hh: $("hh"),
+    mm: $("mm"),
+    ss: $("ss"),
+    badge: $("statusBadge"),
+    label: $("launchLabel"),
+    pretty: $("launchDatePretty"),
+    year: $("year"),
+    themeToggle: $("themeToggle"),
+    form: $("signupForm"),
+    email: $("email"),
+    company: $("company"),
+    toast: $("toast"),
+  };
 
-/* Background layers */
-.bg{ position:fixed; inset:0; z-index:-1; }
-.noise{
-  position:absolute; inset:0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.28'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
-  opacity:.20;
-  pointer-events:none;
-}
-.grid{
-  position:absolute; inset:-2px;
-  background:
-    linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: radial-gradient(circle at 40% 25%, rgba(0,0,0,1), rgba(0,0,0,.1) 55%, transparent 75%);
-  opacity:.18;
-}
-.orb{
-  position:absolute;
-  width:520px; height:520px;
-  border-radius: 999px;
-  filter: blur(22px);
-  opacity:.25;
-  transform: translate3d(0,0,0);
-}
-.orb1{
-  left:-160px; top:-160px;
-  background: radial-gradient(circle at 30% 30%, rgba(125,224,192,.75), transparent 60%);
-  animation: float1 12s ease-in-out infinite;
-}
-.orb2{
-  right:-220px; top:40px;
-  background: radial-gradient(circle at 40% 35%, rgba(199,183,255,.7), transparent 60%);
-  animation: float2 14s ease-in-out infinite;
-}
-@keyframes float1{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(18px) } }
-@keyframes float2{ 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-16px) } }
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
 
-.wrap{
-  width:min(1120px, 92vw);
-  margin: 0 auto;
-  padding: 92px 0 48px;
-}
+  function safeSetText(el, txt) {
+    if (el) el.textContent = txt;
+  }
 
-/* Nav */
-.nav{
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(12px);
-  background: linear-gradient(to bottom, rgba(7,11,16,.78), rgba(7,11,16,.18));
-  border-bottom: 1px solid rgba(255,255,255,.08);
-  z-index: 50;
-}
-.nav-inner{
-  width:min(1120px, 92vw);
-  margin:0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding: 14px 0;
-}
-.brand{
-  display:flex; align-items:center; gap:12px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.brand-logo{
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  object-fit: cover;
-  box-shadow: var(--glow);
-}
-.brand-text{ opacity:.95; }
+  function showToast(message, ok = true) {
+    const t = els.toast;
+    if (!t) return;
+    t.style.display = "block";
+    t.textContent = message;
 
-.nav-actions{ display:flex; gap:10px; align-items:center; }
-.chip{
-  padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.03);
-  font-size: 13px;
-  color: var(--muted);
-}
-.icon-btn{
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.03);
-  color: var(--muted);
-  border-radius: 12px;
-  width: 40px; height: 40px;
-  cursor:pointer;
-}
+    // nice subtle success/error styling using inline styles (works with your existing CSS)
+    t.style.borderColor = ok
+      ? "rgba(125,224,192,.25)"
+      : "rgba(255,120,120,.25)";
+    t.style.background = ok
+      ? "rgba(125,224,192,.06)"
+      : "rgba(255,120,120,.06)";
+    t.style.color = ok ? "rgba(255,255,255,.80)" : "rgba(255,200,200,.88)";
+  }
 
-/* Hero */
-.hero{
-  display:grid;
-  grid-template-columns: 1.2fr .8fr;
-  gap: 22px;
-  padding-top: 22px;
-}
-@media (max-width: 980px){
-  .hero{ grid-template-columns: 1fr; }
-  .wrap{ padding-top: 70px; }
-}
+  function hideToast() {
+    const t = els.toast;
+    if (!t) return;
+    t.style.display = "none";
+    t.textContent = "";
+  }
 
-.kicker{
-  display:inline-flex;
-  align-items:center;
-  gap:10px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  color: var(--muted);
-  font-size: 13px;
-  width: fit-content;
-}
-.kicker::before{
-  content:"";
-  width:8px; height:8px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 18px rgba(125,224,192,.45);
-}
+  function prettyLocalDate(iso) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "TBD";
+    try {
+      // Example: Tue, Mar 10, 2026, 10:00 AM
+      const fmt = new Intl.DateTimeFormat(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      return fmt.format(d);
+    } catch {
+      return d.toLocaleString();
+    }
+  }
 
-.headline{
-  font-family: var(--serif);
-  font-weight: 650;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-size: clamp(40px, 5.3vw, 62px);
-  margin: 16px 0 14px;
-}
-.headline-quiet{
-  background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,.68));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
+  // =========================
+  // FOOTER YEAR
+  // =========================
+  safeSetText(els.year, String(new Date().getFullYear()));
 
-.subhead{
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1.7;
-  max-width: 62ch;
-  margin: 0 0 18px;
-}
-.subhead strong{
-  color: rgba(255,255,255,.88);
-  font-weight: 650;
-}
+  // =========================
+  // CONTRAST TOGGLE
+  // =========================
+  const STORAGE_KEY = "dts_contrast";
+  function applyContrast(mode) {
+    // mode: "high" | "normal"
+    if (mode === "high") {
+      document.documentElement.setAttribute("data-contrast", "high");
+    } else {
+      document.documentElement.removeAttribute("data-contrast");
+    }
+  }
 
-.cta-row{ display:flex; gap: 10px; flex-wrap:wrap; }
+  // Init contrast from storage
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved === "high") applyContrast("high");
+  } catch {
+    // ignore
+  }
 
-.btn{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  padding: 12px 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: rgba(255,255,255,.03);
-  color: var(--text);
-  font-weight: 650;
-  cursor:pointer;
-  transition: transform .12s ease, background .2s ease, border-color .2s ease;
-  user-select:none;
-}
-.btn:hover{ transform: translateY(-1px); border-color: rgba(255,255,255,.22); }
-.btn.primary{
-  background: linear-gradient(135deg, rgba(125,224,192,.95), rgba(199,183,255,.95));
-  color: rgba(7,11,16,.92);
-  border-color: rgba(255,255,255,.22);
-  box-shadow: var(--shadow);
-}
-.btn.ghost{
-  background: rgba(255,255,255,.02);
-  color: var(--muted);
-}
-.w100{ width:100%; }
+  // Toggle contrast
+  if (els.themeToggle) {
+    els.themeToggle.addEventListener("click", () => {
+      const isHigh = document.documentElement.getAttribute("data-contrast") === "high";
+      const next = isHigh ? "normal" : "high";
+      applyContrast(next);
+      try {
+        localStorage.setItem(STORAGE_KEY, next === "high" ? "high" : "normal");
+      } catch {
+        // ignore
+      }
+    });
+  }
 
-.trust{
-  display:flex;
-  flex-wrap: wrap;
-  gap: 10px 12px;
-  margin-top: 18px;
-}
-.trust-item{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  color: var(--muted);
-  font-size: 13px;
-}
-.dot{
-  width: 8px; height: 8px;
-  border-radius: 99px;
-  background: rgba(255,255,255,.35);
-}
+  // =========================
+  // COUNTDOWN
+  // =========================
+  const targetMs = new Date(LAUNCH_DATE_ISO).getTime();
 
-/* Cards */
-.glass{
-  background: linear-gradient(180deg, rgba(255,255,255,.085), rgba(255,255,255,.04));
-  border: 1px solid rgba(255,255,255,.14);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(14px);
-}
+  safeSetText(els.pretty, prettyLocalDate(LAUNCH_DATE_ISO));
 
-.card{ padding: 18px; }
-.card-top{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:12px;
-}
-.card-title{
-  margin:0;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-}
-.card-subtitle{
-  margin:6px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-.badge{
-  padding: 7px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.04);
-  color: var(--muted);
-  font-size: 12px;
-  white-space:nowrap;
-}
+  function setCountdown(d, h, m, s) {
+    safeSetText(els.dd, pad2(d));
+    safeSetText(els.hh, pad2(h));
+    safeSetText(els.mm, pad2(m));
+    safeSetText(els.ss, pad2(s));
+  }
 
-.countdown{
-  display:grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-top: 14px;
-}
-.timebox{
-  border-radius: var(--radius2);
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  padding: 12px 10px;
-  text-align:center;
-}
-.num{
-  font-size: 26px;
-  font-weight: 850;
-  letter-spacing: -0.03em;
-}
-.lbl{
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
+  function tickCountdown() {
+    if (!Number.isFinite(targetMs)) {
+      setCountdown("--", "--", "--", "--");
+      safeSetText(els.badge, "Coming Soon");
+      safeSetText(els.label, "Launch date TBD");
+      return;
+    }
 
-.divider{
-  height: 1px;
-  background: rgba(255,255,255,.10);
-  margin: 14px 0;
-}
+    const now = Date.now();
+    const diff = targetMs - now;
 
-.mini{ display:grid; gap:8px; }
-.mini-row{
-  display:flex;
-  justify-content:space-between;
-  gap:10px;
-  color: var(--muted);
-  font-size: 13px;
-}
-.mini-val{ color: rgba(255,255,255,.82); }
+    if (diff <= 0) {
+      setCountdown(0, 0, 0, 0);
+      safeSetText(els.badge, "Now Live");
+      safeSetText(els.label, "We’re live. Welcome back.");
+      return;
+    }
 
-.card-actions{ display:grid; gap:10px; margin-top: 14px; }
+    const totalSeconds = Math.floor(diff / 1000);
+    const days = Math.floor(totalSeconds / (3600 * 24));
+    const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
 
-.skill-row{
-  display:flex;
-  flex-wrap:wrap;
-  gap:10px;
-  margin-top: 12px;
-}
-.pill{
-  padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  color: var(--muted);
-  font-size: 13px;
-}
+    setCountdown(days, hours, mins, secs);
+    safeSetText(els.badge, "Coming Soon");
+    safeSetText(els.label, "New experience begins soon");
+  }
 
-/* Sections */
-.section{ padding: 54px 0 0; }
-.section-head h2{
-  font-family: var(--serif);
-  margin: 0 0 8px;
-  font-size: 34px;
-  letter-spacing: -0.02em;
-}
-.section-head p{
-  margin: 0;
-  color: var(--muted);
-  line-height:1.6;
-}
+  tickCountdown();
+  setInterval(tickCountdown, 1000);
 
-.grid-3{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-top: 18px;
-}
-@media (max-width: 980px){
-  .grid-3{ grid-template-columns: 1fr; }
-}
+  // =========================
+  // REVEAL ON SCROLL
+  // =========================
+  const revealEls = Array.from(document.querySelectorAll(".reveal"));
 
-.tile{
-  border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  padding: 18px;
-  transition: transform .14s ease, border-color .2s ease;
-}
-.tile:hover{
-  transform: translateY(-2px);
-  border-color: rgba(255,255,255,.22);
-}
-.tile h3{
-  margin: 0 0 8px;
-  letter-spacing:-0.02em;
-}
-.tile p{
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-}
+  if (revealEls.length) {
+    const reduceMotion =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* Split section */
-.split{
-  display:grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-  align-items:start;
-}
-@media (max-width: 980px){
-  .split{ grid-template-columns: 1fr; }
-}
+    if (reduceMotion) {
+      revealEls.forEach((el) => el.classList.add("in"));
+    } else if ("IntersectionObserver" in window) {
+      const io = new IntersectionObserver(
+        (entries, obs) => {
+          for (const e of entries) {
+            if (e.isIntersecting) {
+              e.target.classList.add("in");
+              obs.unobserve(e.target);
+            }
+          }
+        },
+        { threshold: 0.12 }
+      );
 
-.split-left h2{
-  font-family: var(--serif);
-  font-size: 34px;
-  margin: 0 0 10px;
-}
-.split-left p{
-  color: var(--muted);
-  line-height:1.6;
-  margin: 0 0 14px;
-}
-.bullets{
-  margin:0;
-  padding:0;
-  list-style:none;
-  display:grid;
-  gap:10px;
-}
-.bullets li{
-  display:flex;
-  gap:10px;
-  color: var(--muted);
-}
-.check{
-  width: 22px; height: 22px;
-  border-radius: 8px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(125,224,192,.14);
-  border: 1px solid rgba(125,224,192,.25);
-  color: rgba(125,224,192,.95);
-  flex: 0 0 auto;
-}
+      revealEls.forEach((el) => io.observe(el));
+    } else {
+      // fallback
+      revealEls.forEach((el) => el.classList.add("in"));
+    }
+  }
 
-.form{ padding: 18px; }
-.label{
-  display:block;
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 8px;
-}
-.input-row{
-  display:flex;
-  gap:10px;
-}
-@media (max-width: 520px){
-  .input-row{ flex-direction:column; }
-}
-input[type="email"]{
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(0,0,0,.18);
-  color: var(--text);
-  padding: 12px 12px;
-  font-size: 15px;
-}
-.hp{
-  position:absolute;
-  left:-9999px;
-  width:1px;
-  height:1px;
-  opacity:0;
-}
+  // =========================
+  // FORM SUBMIT
+  // =========================
+  async function submitToEndpoint(email) {
+    // If you’re using Formspree, this works as-is.
+    // If your endpoint expects a different schema, update payload below.
+    const payload = {
+      email,
+      source: "deeperthanskin-relaunch",
+      intent: "early-access",
+      launchDate: LAUNCH_DATE_ISO,
+      createdAt: new Date().toISOString(),
+    };
 
-.fineprint{
-  margin: 10px 0 0;
-  color: var(--faint);
-  font-size: 12px;
-  line-height:1.5;
-}
-.form-actions{ margin-top: 12px; }
-.hint{
-  color: var(--faint);
-  font-size: 12px;
-  margin: 0;
-}
-.toast{
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  color: var(--muted);
-  display:none;
-}
+    const res = await fetch(FORM_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
-/* Contact */
-.contact-row{
-  display:grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-top: 18px;
-}
-@media (max-width: 980px){
-  .contact-row{ grid-template-columns: 1fr; }
-}
-.contact-card{
-  border-radius: var(--radius);
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.03);
-  padding: 16px;
-  display:flex;
-  gap:12px;
-  align-items:center;
-  transition: transform .14s ease, border-color .2s ease;
-}
-.contact-card:hover{
-  transform: translateY(-2px);
-  border-color: rgba(255,255,255,.22);
-}
-.contact-ico{
-  width: 42px; height: 42px;
-  border-radius: 16px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.10);
-  color: rgba(255,255,255,.82);
-}
-.contact-title{ font-weight: 750; letter-spacing:-0.02em; }
-.contact-sub{ color: var(--muted); font-size: 13px; margin-top: 2px; }
+    // Many providers return 200/201 even on success without JSON
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.error) msg = data.error;
+      } catch {
+        // ignore
+      }
+      throw new Error(msg);
+    }
+  }
 
-/* Footer */
-.footer{
-  padding: 46px 0 10px;
-  color: var(--muted);
-}
-.footer-inner{
-  display:flex;
-  justify-content:space-between;
-  gap: 18px;
-  align-items:flex-start;
-  border-top: 1px solid rgba(255,255,255,.10);
-  padding-top: 16px;
-}
-@media (max-width: 720px){
-  .footer-inner{ flex-direction
+  function mailtoFallback(email) {
+    const body =
+      `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
+      `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
+      `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
+      `Thanks!`;
+
+    const url =
+      `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
+      `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
+      `&body=${body}`;
+
+    window.location.href = url;
+  }
+
+  if (els.form) {
+    els.form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      hideToast();
+
+      const email = (els.email?.value || "").trim();
+      const honey = (els.company?.value || "").trim();
+
+      // Honeypot: if filled, silently "succeed"
+      if (honey) {
+        showToast("Thanks! You’re on the list.", true);
+        try { els.form.reset(); } catch {}
+        return;
+      }
+
+      if (!email || !email.includes("@")) {
+        showToast("Please enter a valid email address.", false);
+        els.email?.focus?.();
+        return;
+      }
+
+      // Disable button while processing
+      const btn = els.form.querySelector('button[type="submit"]');
+      const prevText = btn ? btn.textContent : "";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Adding...";
+      }
+
+      try {
+        if (FORM_ENDPOINT) {
+          await submitToEndpoint(email);
+          showToast("You’re in. We’ll email you early access updates.", true);
+          try { els.form.reset(); } catch {}
+        } else {
+          // No endpoint set: use mailto fallback so it still “works”
+          showToast("Opening your email app to confirm signup…", true);
+          mailtoFallback(email);
+        }
+      } catch (err) {
+        showToast(
+          "Signup didn’t go through. Try again or email us directly.",
+          false
+        );
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = prevText || "Notify me";
+        }
+      }
+    });
+  }
+
+})();
