@@ -1,3 +1,11 @@
+/* styles.css — Deeper Than Skin Relaunch (FULL DROP-IN)
+   Refactor notes (baked in, no extra work needed):
+   - Completed truncated footer media query and missing footer styles
+   - Added .foot-left / .foot-right / .foot-brand / .brand-dot / links + credit styling
+   - Kept your visual system intact (tokens, layout, glass, gradients)
+   - Added reveal animation + reduced-motion safety
+*/
+
 :root{
   --bg:#070b10;
   --panel: rgba(255,255,255,.06);
@@ -528,15 +536,10 @@ input[type="email"]{
   width: 20px;
   height: 20px;
   display: block;
-
-  /* Makes a black SVG icon show nicely on your dark UI */
   filter: invert(1);
   opacity: .92;
 }
-
-.contact-card:hover .social-ico{
-  opacity: 1;
-}
+.contact-card:hover .social-ico{ opacity: 1; }
 
 .contact-title{ font-weight: 750; letter-spacing:-0.02em; }
 .contact-sub{ color: var(--muted); font-size: 13px; margin-top: 2px; }
@@ -555,4 +558,81 @@ input[type="email"]{
   padding-top: 16px;
 }
 @media (max-width: 720px){
-  .footer-inner{ flex-direction
+  .footer-inner{ flex-direction:column; }
+  .foot-right{ justify-content:flex-start; }
+}
+.foot-left{ max-width: 60ch; }
+.foot-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight: 800;
+  color: rgba(255,255,255,.86);
+  letter-spacing: -0.02em;
+}
+.brand-dot{
+  width: 10px; height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(125,224,192,1), rgba(199,183,255,1));
+  box-shadow: var(--glow);
+}
+.foot-note{
+  margin: 10px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.foot-right{
+  display:flex;
+  gap: 10px;
+  flex-wrap:wrap;
+}
+.foot-link{
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.02);
+  color: var(--muted);
+  font-size: 13px;
+  transition: border-color .2s ease, transform .12s ease, background .2s ease;
+}
+.foot-link:hover{
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.22);
+  background: rgba(255,255,255,.03);
+}
+
+/* SmashPro credit */
+.credit{
+  margin: 10px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.credit[data-credit="off"]{ display:none; }
+.credit-link{
+  color: rgba(255,255,255,.80);
+  border-bottom: 1px solid rgba(255,255,255,.22);
+}
+.credit-link:hover{
+  color: rgba(255,255,255,.92);
+  border-bottom-color: rgba(255,255,255,.35);
+}
+
+/* Reveal animation */
+.reveal{
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .6s ease, transform .6s ease;
+}
+.reveal.in{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce){
+  .reveal{ opacity:1; transform:none; transition:none; }
+  .orb1, .orb2{ animation:none; }
+  .btn:hover, .tile:hover, .contact-card:hover, .foot-link:hover{ transform:none; }
+}
