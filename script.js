@@ -21,7 +21,7 @@
 
   // Optional: set to a real endpoint (Formspree / Airtable / Supabase edge function).
   // Leave empty to use mailto fallback.
-  const FORM_ENDPOINT = "";
+  const FORM_ENDPOINT = "https://formspree.io/f/xdadnwbn";
 
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
