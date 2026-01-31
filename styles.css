@@ -524,6 +524,20 @@ input[type="email"]{
   border: 1px solid rgba(255,255,255,.10);
   color: rgba(255,255,255,.82);
 }
+.social-ico{
+  width: 20px;
+  height: 20px;
+  display: block;
+
+  /* Makes a black SVG icon show nicely on your dark UI */
+  filter: invert(1);
+  opacity: .92;
+}
+
+.contact-card:hover .social-ico{
+  opacity: 1;
+}
+
 .contact-title{ font-weight: 750; letter-spacing:-0.02em; }
 .contact-sub{ color: var(--muted); font-size: 13px; margin-top: 2px; }
 
