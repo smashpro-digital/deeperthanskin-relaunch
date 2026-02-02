@@ -6,7 +6,7 @@
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
 // - Reveal-on-scroll (.reveal -> .in)
-// - Early access form handling (endpoint optional; mailto fallback)
+// - Early access form handling (SmashPro public waitlist endpoint + mailto fallback)
 // - Honeypot support (#company)
 
 (() => {
@@ -19,9 +19,15 @@
   // DST is in effect by then, so -04:00 is correct.
   const LAUNCH_DATE_ISO = "2026-03-10T10:00:00-04:00";
 
-  // Optional: set to a real endpoint (Formspree / Airtable / Supabase edge function).
-  // Leave empty to use mailto fallback.
-  const FORM_ENDPOINT = "https://formspree.io/f/xdadnwbn";
+  // SmashPro public waitlist endpoint (NO API KEY REQUIRED)
+  const WAITLIST_ENDPOINT =
+    "https://smashpro.app/api/v1/index.php?path=public/waitlist";
+
+  // Used by the waitlist allowlist server-side
+  const APP_SLUG = "deeper-than-skin";
+
+  // Tracking/source string stored in DB (spd_waitlist.source)
+  const SOURCE_TAG = "dts-relaunch";
 
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
@@ -122,13 +128,11 @@
       els.themeToggle.title = isHigh
         ? "Contrast: High (click to disable)"
         : "Contrast: Normal (click to enable)";
-      // Optional: swap icon
       const span = els.themeToggle.querySelector("span");
       if (span) span.textContent = isHigh ? "◑" : "◐";
     }
 
     function applyContrast(isHigh) {
-      // Apply to <html>
       document.documentElement.toggleAttribute("data-contrast", isHigh);
       if (isHigh) {
         document.documentElement.setAttribute("data-contrast", "high");
@@ -138,16 +142,14 @@
       setButtonState(isHigh);
     }
 
-    // Load saved preference
     let savedMode = "normal";
     try {
       savedMode = localStorage.getItem(STORAGE_KEY) || "normal";
     } catch {}
     applyContrast(savedMode === "high");
 
-    // Hook click
     if (els.themeToggle) {
-      els.themeToggle.type = "button"; // guard against accidental form behavior
+      els.themeToggle.type = "button";
       els.themeToggle.addEventListener("click", () => {
         const isHigh =
           document.documentElement.getAttribute("data-contrast") === "high";
@@ -234,32 +236,41 @@
     }
 
     // =========================
-    // FORM SUBMIT
+    // FORM SUBMIT (SmashPro Waitlist)
     // =========================
-    async function submitToEndpoint(email) {
+    async function submitToWaitlist(email) {
       const payload = {
+        app_slug: APP_SLUG,
         email,
-        source: "deeperthanskin-relaunch",
-        intent: "early-access",
-        incentive: "pop-up RSVP chance",
-        launchDate: LAUNCH_DATE_ISO,
-        createdAt: new Date().toISOString(),
+        source: SOURCE_TAG,
+        consent: 1,
+        landing_origin: window.location.href, // extra field is fine
+        createdAt: new Date().toISOString(),  // extra field is fine
       };
 
-      const res = await fetch(FORM_ENDPOINT, {
+      const res = await fetch(WAITLIST_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        let msg = `Request failed (${res.status})`;
-        try {
-          const data = await res.json();
-          if (data?.error) msg = data.error;
-        } catch {}
+      // Try to parse JSON either way (your API returns JSON on errors)
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {}
+
+      if (!res.ok || !data || data.ok !== true) {
+        const msg =
+          (data && (data.error || data.message)) ||
+          `Request failed (${res.status})`;
         throw new Error(msg);
       }
+
+      return data; // { ok:true, created:bool, app_slug:... }
     }
 
     function mailtoFallback(email) {
@@ -268,6 +279,7 @@
         `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
         `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
         `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
+        `Source: ${encodeURIComponent(SOURCE_TAG)}%0D%0A%0D%0A` +
         `Thanks!`;
 
       const url =
@@ -307,22 +319,22 @@
         }
 
         try {
-          if (FORM_ENDPOINT) {
-            await submitToEndpoint(email);
-            showToast(
-              `You’re in. We’ll email launch updates. ${INCENTIVE_LINE}`,
-              true
-            );
-            try { els.form.reset(); } catch {}
-          } else {
-            showToast(
-              `Opening your email app to confirm signup… ${INCENTIVE_LINE}`,
-              true
-            );
-            mailtoFallback(email);
-          }
-        } catch {
-          showToast("Signup didn’t go through. Try again or email us directly.", false);
+          const result = await submitToWaitlist(email);
+
+          // created=false means “already exists but updated”, still a win
+          const line = result.created
+            ? "You’re in."
+            : "You’re already on the list (we refreshed your entry).";
+
+          showToast(`${line} ${INCENTIVE_LINE}`, true);
+          try { els.form.reset(); } catch {}
+        } catch (err) {
+          // If API fails for any reason, we offer the mailto parachute
+          showToast(
+            "Signup didn’t go through. We’ll open your email app as a fallback.",
+            false
+          );
+          window.setTimeout(() => mailtoFallback(email), 400);
         } finally {
           if (btn) {
             btn.disabled = false;
