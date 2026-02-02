@@ -69,6 +69,17 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   opacity:.20;
   pointer-events:none;
 }
+.waitlist-meta{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:center;
+  margin-top:10px;
+  font-size:.9rem;
+  opacity:.85;
+}
+.waitlist-dot{ opacity:.5; }
+.waitlist-count strong{ font-variant-numeric: tabular-nums; }
 
 .grid{
   position:absolute; inset:-2px;
