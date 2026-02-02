@@ -11,11 +11,11 @@
 // - Waitlist counter (reads from SmashPro)
 // - Owner CSV download (password prompt -> protected endpoint)
 //
-// Notes:
-// - This file does NOT contain the owner's phone/password (prompt only).
-// - Make sure your HTML includes:
-//   - <strong id="waitlistCount">—</strong>
-//   - <button id="csvBtn"> ... </button>  (your lock icon button in the nav)
+// IMPORTANT UPDATE:
+// - Waitlist POST now uses Content-Type: text/plain to avoid CORS preflight
+//   (reduces "Signup didn’t go through" caused by OPTIONS failures)
+// - Better error visibility via console + toast detail fallback
+// - Success message mentions confirmation email (server must send it)
 
 (() => {
   "use strict";
@@ -31,12 +31,10 @@
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
 
   // Returns: { ok:true, app_slug:"...", count: 123 }
-  // (Server route needed: /public/waitlist/count)
   const WAITLIST_COUNT_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/count";
 
   // Returns a CSV file; requires owner password
-  // (Server route needed: /public/waitlist/csv)
   const WAITLIST_CSV_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/csv";
 
@@ -55,6 +53,10 @@
   // Owner-password prompt label (do NOT hardcode the phone number in public JS)
   const OWNER_PROMPT =
     "Owner access: enter password (landing page owner phone number) to download CSV:";
+
+  // Copy for success states
+  const CONFIRM_LINE =
+    "You’ve been added ✅ Check your inbox for a confirmation email.";
 
   // =========================
   // DOM HELPERS
@@ -76,7 +78,6 @@
     company: $("company"),
     toast: $("toast"),
 
-    // NEW
     waitlistCount: $("waitlistCount"),
     csvBtn: $("csvBtn"),
   };
@@ -142,13 +143,17 @@
     return await res.json().catch(() => ({}));
   }
 
+  function compactText(s, max = 140) {
+    const t = String(s || "").replace(/\s+/g, " ").trim();
+    if (!t) return "";
+    return t.length > max ? t.slice(0, max) + "…" : t;
+  }
+
   // =========================
   // WAITLIST COUNT
   // =========================
   async function loadWaitlistCount() {
     if (!els.waitlistCount) return;
-
-    // Placeholder
     safeText(els.waitlistCount, "—");
 
     try {
@@ -179,7 +184,6 @@
     const pw = window.prompt(OWNER_PROMPT, "");
     if (!pw) return;
 
-    // Optional: light normalization (keep digits, plus, dashes)
     const pwClean = String(pw).trim();
     if (pwClean.length < 4) {
       showToast("Password looks too short.", false);
@@ -207,8 +211,6 @@
       }
 
       const blob = await res.blob();
-
-      // Some servers return application/octet-stream; still ok.
       if (!blob || blob.size === 0) {
         showToast("CSV was empty (no data returned).", false);
         return;
@@ -234,6 +236,9 @@
   // =========================
   // WAITLIST SUBMIT
   // =========================
+
+  // IMPORTANT: Use text/plain to avoid CORS preflight (OPTIONS).
+  // Server should read php://input and json_decode regardless of content-type.
   async function submitToWaitlist(email, honey) {
     const payload = {
       app_slug: APP_SLUG,
@@ -246,7 +251,8 @@
     const res = await fetch(WAITLIST_ENDPOINT, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        // "simple" request (no preflight in most browsers)
+        "Content-Type": "text/plain;charset=UTF-8",
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
@@ -255,28 +261,29 @@
     const data = await safeReadJson(res);
 
     if (!res.ok || !data || data.ok !== true) {
-      const msg =
+      const detail =
         (data && (data.error || data.message)) ||
+        (data && data._text ? compactText(data._text) : "") ||
         `Request failed (${res.status})`;
-      throw new Error(msg);
+      throw new Error(detail);
     }
 
-    return data; // { ok:true, created:bool, app_slug:... }
+    return data; // { ok:true, created:bool, app_slug:... , email_sent?:bool }
   }
 
   function mailtoFallback(email) {
-    const body =
-      `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
-      `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
-      `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
-      `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
-      `Source: ${encodeURIComponent(SOURCE_TAG)}%0D%0A%0D%0A` +
+    const bodyRaw =
+      `Hi Deeper Than Skin team,\n\n` +
+      `Please add me to the Early Access list for the wellness relaunch.\n\n` +
+      `${INCENTIVE_LINE}\n\n` +
+      `Email: ${email}\n\n` +
+      `Source: ${SOURCE_TAG}\n\n` +
       `Thanks!`;
 
     const url =
       `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
       `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
-      `&body=${body}`;
+      `&body=${encodeURIComponent(bodyRaw)}`;
 
     window.location.href = url;
   }
@@ -291,7 +298,7 @@
     // Load waitlist count
     loadWaitlistCount();
 
-    // CSV button (lock icon in header)
+    // CSV button
     if (els.csvBtn) {
       els.csvBtn.type = "button";
       els.csvBtn.addEventListener("click", downloadCsvOwner);
@@ -427,7 +434,7 @@
 
         // Honeypot: if filled, silently "succeed"
         if (honey) {
-          showToast("Thanks! You’re on the list.", true);
+          showToast(CONFIRM_LINE, true);
           try { els.form.reset(); } catch {}
           return;
         }
@@ -448,21 +455,33 @@
         try {
           const result = await submitToWaitlist(email, honey);
 
-          const line = result.created
+          // If your server returns email_sent, we can tailor the copy:
+          const emailSent =
+            typeof result.email_sent === "boolean" ? result.email_sent : null;
+
+          const lead = result.created
             ? "You’re in."
             : "You’re already on the list (we refreshed your entry).";
 
-          showToast(`${line} ${INCENTIVE_LINE}`, true);
+          const confirmPart =
+            emailSent === false
+              ? "Added ✅ (Confirmation email may be delayed.)"
+              : CONFIRM_LINE;
+
+          showToast(`${lead} ${confirmPart} ${INCENTIVE_LINE}`, true);
           try { els.form.reset(); } catch {}
 
           // Refresh the counter after successful submit
           loadWaitlistCount();
-        } catch {
+        } catch (err) {
+          // Better diagnostics for you
+          console.error("[waitlist] signup failed:", err);
+
           showToast(
             "Signup didn’t go through. We’ll open your email app as a fallback.",
             false
           );
-          window.setTimeout(() => mailtoFallback(email), 400);
+          window.setTimeout(() => mailtoFallback(email), 450);
         } finally {
           if (btn) {
             btn.disabled = false;
