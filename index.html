@@ -1,458 +1,344 @@
-// script.js — Deeper Than Skin Relaunch (GitHub Pages friendly)
-//
-// Features:
-// - Countdown (LOCKED: March 03, 2026 @ 10:00 PM ET)
-// - Launch date label + status badge
-// - Footer year
-// - Contrast toggle (data-contrast="high") with localStorage persistence
-// - Reveal-on-scroll (.reveal -> .in)
-// - Early access form handling (SmashPro public waitlist endpoint + mailto fallback)
-// - Honeypot support (#company)
-// - Waitlist counter (reads from SmashPro)
-// - Owner CSV download (password prompt -> protected endpoint)
-
-(() => {
-  "use strict";
-
-  // =========================
-  // CONFIG
-  // =========================
-  // NOTE: March 03, 2026 10:00 PM Eastern Time (Standard Time = -05:00)
-  const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-05:00";
-
-  // SmashPro public waitlist endpoint (NO API KEY REQUIRED)
-  const WAITLIST_ENDPOINT =
-    "https://smashpro.app/api/v1/index.php?path=public/waitlist";
-
-  // (You will need to add this route server-side)
-  // Returns: { ok:true, app_slug:"...", count: 123 }
-  const WAITLIST_COUNT_ENDPOINT =
-    "https://smashpro.app/api/v1/index.php?path=public/waitlist/count";
-
-  // (You will need to add this route server-side)
-  // Returns a CSV file; requires password token
-  const WAITLIST_CSV_ENDPOINT =
-    "https://smashpro.app/api/v1/index.php?path=public/waitlist.csv";
-
-  // Used by the waitlist allowlist server-side
-  const APP_SLUG = "deeper-than-skin";
-
-  // Tracking/source string stored in DB (spd_waitlist.source)
-  const SOURCE_TAG = "dts-relaunch";
-
-  const CONTACT_EMAIL = "info@deeperthanskin.store";
-  const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
-
-  const INCENTIVE_LINE =
-    "Bonus: Join the list for a chance to RSVP for our launch pop-up + early access perks.";
-
-  // Owner-password prompt label (do NOT hardcode the phone number in public JS)
-  const OWNER_PROMPT =
-    "Owner access: enter password (landing page owner phone number) to download CSV:";
-
-  // =========================
-  // DOM HELPERS
-  // =========================
-  const $ = (id) => document.getElementById(id);
-
-  const els = {
-    dd: $("dd"),
-    hh: $("hh"),
-    mm: $("mm"),
-    ss: $("ss"),
-    badge: $("statusBadge"),
-    label: $("launchLabel"),
-    pretty: $("launchDatePretty"),
-    year: $("year"),
-    themeToggle: $("themeToggle"),
-    form: $("signupForm"),
-    email: $("email"),
-    company: $("company"),
-    toast: $("toast"),
-
-    // NEW
-    waitlistCount: $("waitlistCount"),
-    csvBtn: $("csvBtn"),
-  };
-
-  const pad2 = (n) => String(n).padStart(2, "0");
-  const safeText = (el, txt) => {
-    if (el) el.textContent = String(txt);
-  };
-
-  const onReady = (fn) => {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn, { once: true });
-    } else {
-      fn();
-    }
-  };
-
-  function showToast(message, ok = true) {
-    if (!els.toast) return;
-    els.toast.style.display = "block";
-    els.toast.textContent = message;
-
-    els.toast.style.borderColor = ok
-      ? "rgba(125,224,192,.25)"
-      : "rgba(255,120,120,.25)";
-    els.toast.style.background = ok
-      ? "rgba(125,224,192,.06)"
-      : "rgba(255,120,120,.06)";
-    els.toast.style.color = ok
-      ? "rgba(255,255,255,.85)"
-      : "rgba(255,200,200,.92)";
-  }
-
-  function hideToast() {
-    if (!els.toast) return;
-    els.toast.style.display = "none";
-    els.toast.textContent = "";
-  }
-
-  function prettyLocalDate(iso) {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return "TBD";
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(d);
-    } catch {
-      return d.toLocaleString();
-    }
-  }
-
-  async function safeReadJson(res) {
-    const ct = (res.headers.get("content-type") || "").toLowerCase();
-    if (!ct.includes("application/json")) {
-      const text = await res.text().catch(() => "");
-      return { _text: text };
-    }
-    return await res.json().catch(() => ({}));
-  }
-
-  // =========================
-  // WAITLIST COUNT
-  // =========================
-  async function loadWaitlistCount() {
-    if (!els.waitlistCount) return;
-
-    // Default placeholder
-    safeText(els.waitlistCount, "—");
-
-    try {
-      const url = new URL(WAITLIST_COUNT_ENDPOINT);
-      url.searchParams.set("app_slug", APP_SLUG);
-
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
-
-      const data = await safeReadJson(res);
-
-      if (!res.ok || data.ok !== true) {
-        // Fail silently (don’t spam the UI)
-        return;
-      }
-
-      const n = Number(data.count);
-      if (!Number.isFinite(n)) return;
-
-      safeText(els.waitlistCount, n.toLocaleString());
-    } catch {
-      // silent
-    }
-  }
-
-  // =========================
-  // OWNER CSV DOWNLOAD
-  // =========================
-  async function downloadCsvOwner() {
-    const pw = window.prompt(OWNER_PROMPT, "");
-    if (!pw) return;
-
-    try {
-      // Request a CSV file
-      const url = new URL(WAITLIST_CSV_ENDPOINT);
-      url.searchParams.set("app_slug", APP_SLUG);
-
-      // Send password as header (better than querystring)
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          Accept: "text/csv",
-          "X-Owner-Password": pw,
-        },
-      });
-
-      if (!res.ok) {
-        let msg = `Download failed (${res.status})`;
-        // Try to parse JSON error
-        const data = await safeReadJson(res);
-        if (data && (data.error || data.message)) msg = data.error || data.message;
-        showToast(msg, false);
-        return;
-      }
-
-      const blob = await res.blob();
-      const a = document.createElement("a");
-      const stamp = new Date().toISOString().slice(0, 10);
-      a.href = URL.createObjectURL(blob);
-      a.download = `${APP_SLUG}-waitlist-${stamp}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
-
-      showToast("CSV downloaded ✅", true);
-    } catch {
-      showToast("CSV download failed. Try again.", false);
-    }
-  }
-
-  // =========================
-  // WAITLIST SUBMIT
-  // =========================
-  async function submitToWaitlist(email, honey) {
-    // API expects company honeypot too (your public.waitlist.post checks it)
-    const payload = {
-      app_slug: APP_SLUG,
-      email,
-      source: SOURCE_TAG,
-      consent: 1,
-      company: honey || "",
-    };
-
-    const res = await fetch(WAITLIST_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await safeReadJson(res);
-
-    if (!res.ok || !data || data.ok !== true) {
-      const msg = (data && (data.error || data.message)) || `Request failed (${res.status})`;
-      throw new Error(msg);
-    }
-
-    return data; // { ok:true, created:bool, app_slug:... }
-  }
-
-  function mailtoFallback(email) {
-    const body =
-      `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
-      `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
-      `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
-      `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
-      `Source: ${encodeURIComponent(SOURCE_TAG)}%0D%0A%0D%0A` +
-      `Thanks!`;
-
-    const url =
-      `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
-      `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
-      `&body=${body}`;
-
-    window.location.href = url;
-  }
-
-  // =========================
-  // INIT
-  // =========================
-  onReady(() => {
-    // Footer year
-    safeText(els.year, new Date().getFullYear());
-
-    // Load count once on page load
-    loadWaitlistCount();
-
-    // CSV button
-    if (els.csvBtn) {
-      els.csvBtn.type = "button";
-      els.csvBtn.addEventListener("click", downloadCsvOwner);
-    }
-
-    // =========================
-    // CONTRAST TOGGLE
-    // =========================
-    const STORAGE_KEY = "dts_contrast";
-
-    function setButtonState(isHigh) {
-      if (!els.themeToggle) return;
-      els.themeToggle.setAttribute("aria-pressed", String(isHigh));
-      els.themeToggle.title = isHigh
-        ? "Contrast: High (click to disable)"
-        : "Contrast: Normal (click to enable)";
-      const span = els.themeToggle.querySelector("span");
-      if (span) span.textContent = isHigh ? "◑" : "◐";
-    }
-
-    function applyContrast(isHigh) {
-      if (isHigh) {
-        document.documentElement.setAttribute("data-contrast", "high");
-      } else {
-        document.documentElement.removeAttribute("data-contrast");
-      }
-      setButtonState(isHigh);
-    }
-
-    let savedMode = "normal";
-    try {
-      savedMode = localStorage.getItem(STORAGE_KEY) || "normal";
-    } catch {}
-    applyContrast(savedMode === "high");
-
-    if (els.themeToggle) {
-      els.themeToggle.type = "button";
-      els.themeToggle.addEventListener("click", () => {
-        const isHigh = document.documentElement.getAttribute("data-contrast") === "high";
-        const nextHigh = !isHigh;
-        applyContrast(nextHigh);
-        try {
-          localStorage.setItem(STORAGE_KEY, nextHigh ? "high" : "normal");
-        } catch {}
-      });
-    }
-
-    // =========================
-    // COUNTDOWN
-    // =========================
-    const targetMs = new Date(LAUNCH_DATE_ISO).getTime();
-    safeText(els.pretty, prettyLocalDate(LAUNCH_DATE_ISO));
-
-    function setCountdown(d, h, m, s) {
-      safeText(els.dd, pad2(d));
-      safeText(els.hh, pad2(h));
-      safeText(els.mm, pad2(m));
-      safeText(els.ss, pad2(s));
-    }
-
-    function tickCountdown() {
-      if (!Number.isFinite(targetMs)) {
-        setCountdown("--", "--", "--", "--");
-        safeText(els.badge, "Coming Soon");
-        safeText(els.label, "Launch date TBD");
-        return;
-      }
-
-      const now = Date.now();
-      const diff = targetMs - now;
-
-      if (diff <= 0) {
-        setCountdown(0, 0, 0, 0);
-        safeText(els.badge, "Now Live");
-        safeText(els.label, "We’re live. Welcome back.");
-        return;
-      }
-
-      const totalSeconds = Math.floor(diff / 1000);
-      const days = Math.floor(totalSeconds / (3600 * 24));
-      const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
-      const mins = Math.floor((totalSeconds % 3600) / 60);
-      const secs = totalSeconds % 60;
-
-      setCountdown(days, hours, mins, secs);
-      safeText(els.badge, "Coming Soon");
-      safeText(els.label, "New experience begins March 3");
-    }
-
-    tickCountdown();
-    window.setInterval(tickCountdown, 1000);
-
-    // =========================
-    // REVEAL ON SCROLL
-    // =========================
-    const revealEls = Array.from(document.querySelectorAll(".reveal"));
-    if (revealEls.length) {
-      const reduceMotion =
-        window.matchMedia &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      if (reduceMotion) {
-        revealEls.forEach((el) => el.classList.add("in"));
-      } else if ("IntersectionObserver" in window) {
-        const io = new IntersectionObserver(
-          (entries, obs) => {
-            for (const e of entries) {
-              if (e.isIntersecting) {
-                e.target.classList.add("in");
-                obs.unobserve(e.target);
-              }
-            }
-          },
-          { threshold: 0.12 }
-        );
-        revealEls.forEach((el) => io.observe(el));
-      } else {
-        revealEls.forEach((el) => el.classList.add("in"));
-      }
-    }
-
-    // =========================
-    // FORM SUBMIT
-    // =========================
-    if (els.form) {
-      els.form.addEventListener("submit", async (ev) => {
-        ev.preventDefault();
-        hideToast();
-
-        const email = (els.email?.value || "").trim();
-        const honey = (els.company?.value || "").trim();
-
-        // Honeypot: if filled, silently "succeed"
-        if (honey) {
-          showToast("Thanks! You’re on the list.", true);
-          try { els.form.reset(); } catch {}
-          return;
-        }
-
-        if (!email || !email.includes("@")) {
-          showToast("Please enter a valid email address.", false);
-          els.email?.focus?.();
-          return;
-        }
-
-        const btn = els.form.querySelector('button[type="submit"]');
-        const prevText = btn ? btn.textContent : "";
-        if (btn) {
-          btn.disabled = true;
-          btn.textContent = "Adding...";
-        }
-
-        try {
-          const result = await submitToWaitlist(email, honey);
-
-          const line = result.created
-            ? "You’re in."
-            : "You’re already on the list (we refreshed your entry).";
-
-          showToast(`${line} ${INCENTIVE_LINE}`, true);
-          try { els.form.reset(); } catch {}
-
-          // Refresh the counter after successful submit
-          loadWaitlistCount();
-        } catch (err) {
-          showToast(
-            "Signup didn’t go through. We’ll open your email app as a fallback.",
-            false
-          );
-          window.setTimeout(() => mailtoFallback(email), 400);
-        } finally {
-          if (btn) {
-            btn.disabled = false;
-            btn.textContent = prevText || "Notify me";
-          }
-        }
-      });
-    }
-  });
-})();
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0f14" />
+
+  <title>Deeper Than Skin | Wellness Relaunch</title>
+  <meta name="description" content="Deeper Than Skin is returning with a wellness-first focus: internal health products and a curated return of top-selling skincare essentials. A new web + mobile shopping experience is coming soon." />
+
+  <!-- Canonical: set to your final domain when ready -->
+  <link rel="canonical" href="https://deeperthanskin.store/" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Deeper Than Skin | Wellness Relaunch" />
+  <meta property="og:description" content="Wellness from within. Our most loved skincare essentials, curated. A new digital experience is coming soon." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="assets/og-card.png" />
+  <meta property="og:url" content="https://deeperthanskin.store/" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Deeper Than Skin | Wellness Relaunch" />
+  <meta name="twitter:description" content="Wellness-first relaunch. Internal health products + curated skincare best sellers. New web + mobile shopping experience." />
+  <meta name="twitter:image" content="assets/og-card.png" />
+
+  <!-- Icons -->
+  <link rel="icon" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300,500,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Tiny utility styles for the owner CSV icon button (safe if your CSS doesn't have these) -->
+  <style>
+    .nav-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-btn { display:inline-flex; align-items:center; justify-content:center; }
+    .icon-btn svg { width: 18px; height: 18px; display:block; }
+    .icon-btn.lock { opacity: .85; }
+    .icon-btn.lock:hover { opacity: 1; }
+    .icon-btn.lock:focus { outline: 2px solid rgba(255,255,255,.25); outline-offset: 3px; }
+  </style>
+</head>
+
+<body>
+  <!-- Background layers -->
+  <div class="bg" aria-hidden="true">
+    <div class="noise"></div>
+    <div class="orb orb1"></div>
+    <div class="orb orb2"></div>
+    <div class="grid"></div>
+  </div>
+
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#" aria-label="Deeper Than Skin home">
+        <img class="brand-logo" src="assets/logo.png" alt="Deeper Than Skin logo" />
+        <span class="brand-text">Deeper Than Skin</span>
+      </a>
+
+      <div class="nav-actions">
+        <a class="chip" href="#early-access">Get Early Access</a>
+
+        <!-- NEW: Owner-only CSV download icon button (subtle, near contrast toggle) -->
+        <button
+          class="icon-btn lock"
+          id="csvBtn"
+          type="button"
+          aria-label="Owner tools: download waitlist CSV"
+          title="Owner tools (locked): Download CSV"
+        >
+          <!-- inline lock icon -->
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M17 9h-1V7a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2Zm-7-2a2 2 0 0 1 4 0v2h-4V7Zm7 12H7v-8h10v8Z"/>
+          </svg>
+        </button>
+
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle contrast mode" title="Toggle contrast mode">
+          <span aria-hidden="true">◐</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-left">
+        <p class="kicker reveal">Wellness-first relaunch</p>
+
+        <h1 class="headline reveal">
+          <span class="headline-quiet">Deeper Than Skin</span>
+          is evolving.
+        </h1>
+
+        <p class="subhead reveal">
+          We’re returning with a wellness-first focus on <strong>internal health products</strong>,
+          alongside a curated selection of our <strong>top-selling skincare essentials</strong>.
+          A redesigned shopping experience across <strong>web + mobile</strong> is coming soon.
+        </p>
+
+        <div class="cta-row reveal">
+          <a class="btn primary" href="#early-access">Get Early Access</a>
+          <a class="btn ghost" href="#what-coming">What’s Coming</a>
+        </div>
+
+        <div class="trust reveal" role="list" aria-label="Highlights">
+          <div class="trust-item" role="listitem">
+            <span class="dot" aria-hidden="true"></span>
+            Internal health products as the foundation
+          </div>
+          <div class="trust-item" role="listitem">
+            <span class="dot" aria-hidden="true"></span>
+            Curated return of skincare best sellers
+          </div>
+          <div class="trust-item" role="listitem">
+            <span class="dot" aria-hidden="true"></span>
+            New web + mobile shopping experience
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-right reveal">
+        <div class="card glass">
+          <div class="card-top">
+            <div>
+              <p class="card-title">Launch Countdown</p>
+              <p class="card-subtitle" id="launchLabel">New experience begins soon</p>
+            </div>
+            <div class="badge" id="statusBadge">Coming Soon</div>
+          </div>
+
+          <div class="countdown" aria-label="Countdown timer">
+            <div class="timebox">
+              <div class="num" id="dd">--</div>
+              <div class="lbl">Days</div>
+            </div>
+            <div class="timebox">
+              <div class="num" id="hh">--</div>
+              <div class="lbl">Hours</div>
+            </div>
+            <div class="timebox">
+              <div class="num" id="mm">--</div>
+              <div class="lbl">Minutes</div>
+            </div>
+            <div class="timebox">
+              <div class="num" id="ss">--</div>
+              <div class="lbl">Seconds</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="mini">
+            <div class="mini-row">
+              <span class="mini-key">Launch date</span>
+              <span class="mini-val" id="launchDatePretty">TBD</span>
+            </div>
+            <div class="mini-row">
+              <span class="mini-key">Experience</span>
+              <span class="mini-val">Web + Mobile</span>
+            </div>
+          </div>
+
+          <div class="card-actions">
+            <a class="btn primary w100" href="#early-access">Join the list</a>
+            <a class="btn ghost w100" href="#contact">Contact</a>
+          </div>
+        </div>
+
+        <div class="skill-row reveal" aria-label="Digital capabilities">
+          <div class="pill">UX-first</div>
+          <div class="pill">Mobile-ready</div>
+          <div class="pill">Fast + secure</div>
+          <div class="pill">Conversion-focused</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHAT'S COMING -->
+    <section class="section" id="what-coming">
+      <div class="section-head reveal">
+        <h2>What’s coming</h2>
+        <p>Fewer products. Greater intention. A smoother way to shop.</p>
+      </div>
+
+      <div class="grid-3">
+        <article class="tile reveal">
+          <h3>Internal Health Focus</h3>
+          <p>
+            A wellness-first lineup designed to support the body from within. Clear guidance,
+            simple bundles, and a refined catalog.
+          </p>
+        </article>
+
+        <article class="tile reveal">
+          <h3>Best Sellers Only</h3>
+          <p>
+            We’re bringing back our most-loved skincare essentials: the proven favorites customers
+            return for, season after season.
+          </p>
+        </article>
+
+        <article class="tile reveal">
+          <h3>New Digital Shopping</h3>
+          <p>
+            A redesigned storefront built for speed and clarity across web and mobile,
+            with smoother checkout and better discovery.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <!-- EARLY ACCESS -->
+    <section class="section split" id="early-access">
+      <div class="split-left reveal">
+        <h2>Get early access</h2>
+        <p>
+          Be first to know when the wellness collection drops, when best sellers return,
+          and when the new shopping experience goes live.
+        </p>
+
+        <ul class="bullets">
+          <li><span class="check" aria-hidden="true">✓</span> Launch updates (no spam)</li>
+          <li><span class="check" aria-hidden="true">✓</span> Early access announcements</li>
+          <li><span class="check" aria-hidden="true">✓</span> Limited drops + restocks</li>
+        </ul>
+      </div>
+
+      <div class="split-right reveal">
+        <form class="form glass" id="signupForm">
+          <label class="label" for="email">Email</label>
+
+          <div class="input-row">
+            <input id="email" name="email" type="email" placeholder="you@domain.com" autocomplete="email" required />
+            <button class="btn primary" type="submit">Notify me</button>
+          </div>
+
+          <!-- Honeypot (anti-bot). Keep hidden. -->
+          <input class="hp" type="text" id="company" name="company" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+          <p class="fineprint">
+            We only email for launch updates and early access.
+          </p>
+
+          <!-- Waitlist counter (script.js fills this) -->
+          <div class="waitlist-meta" aria-label="Waitlist status">
+            <span class="waitlist-count">
+              <strong id="waitlistCount">—</strong> people already joined
+            </span>
+            <span class="waitlist-dot" aria-hidden="true">•</span>
+            <span class="waitlist-app">Deeper Than Skin</span>
+          </div>
+
+          <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+          <!-- NOTE: CSV button removed from form so guests don't see it -->
+        </form>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section class="section" id="contact">
+      <div class="section-head reveal">
+        <h2>Contact</h2>
+        <p>Questions about the relaunch or availability? Reach us directly.</p>
+      </div>
+
+      <div class="contact-row reveal">
+        <a class="contact-card" href="mailto:info@deeperthanskin.store?subject=Deeper%20Than%20Skin%20Relaunch%20Inquiry">
+          <div class="contact-ico" aria-hidden="true">✉</div>
+          <div>
+            <div class="contact-title">Email</div>
+            <div class="contact-sub">hello@deeperthanskin.store</div>
+          </div>
+        </a>
+
+        <a class="contact-card" href="https://instagram.com/deeperthanskin_llc" target="_blank" rel="noopener">
+          <div class="contact-ico" aria-hidden="true">
+            <img
+              class="social-ico"
+              src="https://www.svgrepo.com/download/494344/instagram.svg"
+              alt=""
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            />
+          </div>
+          <div>
+            <div class="contact-title">Follow</div>
+            <div class="contact-sub">instagram.com/deeperthanskin_llc</div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="foot-left">
+          <div class="foot-brand">
+            <img
+              class="credit-logo"
+              src="https://smashpro-digital.github.io/deeperthanskin-relaunch/assets/logo.png"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+              alt=""
+            />
+            <span>Deeper Than Skin</span>
+          </div>
+
+          <p class="foot-note">
+            © <span id="year"></span> Deeper Than Skin. All rights reserved.
+          </p>
+
+          <p class="credit" data-credit="on">
+            <a class="credit-link" href="https://dashboard.smashpro.app" target="_blank" rel="noopener">
+              <img
+                class="credit-logo"
+                src="https://smashpro.app/dashboard/assets/smashpro-bot-o95WwCXY.png"
+                alt="SmashPro Digital"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              SmashPro Digital
+            </a>.
+          </p>
+        </div>
+
+        <div class="foot-right">
+          <a class="foot-link" href="#early-access">Early Access</a>
+          <a class="foot-link" href="#what-coming">What’s coming</a>
+          <a class="foot-link" href="#contact">Contact</a>
+        </div>
+      </div>
+    </footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
