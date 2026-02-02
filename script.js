@@ -10,6 +10,12 @@
 // - Honeypot support (#company)
 // - Waitlist counter (reads from SmashPro)
 // - Owner CSV download (password prompt -> protected endpoint)
+//
+// Notes:
+// - This file does NOT contain the owner's phone/password (prompt only).
+// - Make sure your HTML includes:
+//   - <strong id="waitlistCount">—</strong>
+//   - <button id="csvBtn"> ... </button>  (your lock icon button in the nav)
 
 (() => {
   "use strict";
@@ -24,15 +30,15 @@
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
 
-  // (You will need to add this route server-side)
   // Returns: { ok:true, app_slug:"...", count: 123 }
+  // (Server route needed: /public/waitlist/count)
   const WAITLIST_COUNT_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/count";
 
-  // (You will need to add this route server-side)
-  // Returns a CSV file; requires password token
+  // Returns a CSV file; requires owner password
+  // (Server route needed: /public/waitlist/csv)
   const WAITLIST_CSV_ENDPOINT =
-    "https://smashpro.app/api/v1/index.php?path=public/waitlist.csv";
+    "https://smashpro.app/api/v1/index.php?path=public/waitlist/csv";
 
   // Used by the waitlist allowlist server-side
   const APP_SLUG = "deeper-than-skin";
@@ -142,7 +148,7 @@
   async function loadWaitlistCount() {
     if (!els.waitlistCount) return;
 
-    // Default placeholder
+    // Placeholder
     safeText(els.waitlistCount, "—");
 
     try {
@@ -155,11 +161,7 @@
       });
 
       const data = await safeReadJson(res);
-
-      if (!res.ok || data.ok !== true) {
-        // Fail silently (don’t spam the UI)
-        return;
-      }
+      if (!res.ok || data.ok !== true) return;
 
       const n = Number(data.count);
       if (!Number.isFinite(n)) return;
@@ -177,23 +179,27 @@
     const pw = window.prompt(OWNER_PROMPT, "");
     if (!pw) return;
 
+    // Optional: light normalization (keep digits, plus, dashes)
+    const pwClean = String(pw).trim();
+    if (pwClean.length < 4) {
+      showToast("Password looks too short.", false);
+      return;
+    }
+
     try {
-      // Request a CSV file
       const url = new URL(WAITLIST_CSV_ENDPOINT);
       url.searchParams.set("app_slug", APP_SLUG);
 
-      // Send password as header (better than querystring)
       const res = await fetch(url.toString(), {
         method: "GET",
         headers: {
           Accept: "text/csv",
-          "X-Owner-Password": pw,
+          "X-Owner-Password": pwClean,
         },
       });
 
       if (!res.ok) {
         let msg = `Download failed (${res.status})`;
-        // Try to parse JSON error
         const data = await safeReadJson(res);
         if (data && (data.error || data.message)) msg = data.error || data.message;
         showToast(msg, false);
@@ -201,16 +207,25 @@
       }
 
       const blob = await res.blob();
-      const a = document.createElement("a");
+
+      // Some servers return application/octet-stream; still ok.
+      if (!blob || blob.size === 0) {
+        showToast("CSV was empty (no data returned).", false);
+        return;
+      }
+
       const stamp = new Date().toISOString().slice(0, 10);
+      const filename = `${APP_SLUG}-waitlist-${stamp}.csv`;
+
+      const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `${APP_SLUG}-waitlist-${stamp}.csv`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(a.href);
 
-      showToast("CSV downloaded ✅", true);
+      showToast("CSV downloaded 🔒✅", true);
     } catch {
       showToast("CSV download failed. Try again.", false);
     }
@@ -220,13 +235,12 @@
   // WAITLIST SUBMIT
   // =========================
   async function submitToWaitlist(email, honey) {
-    // API expects company honeypot too (your public.waitlist.post checks it)
     const payload = {
       app_slug: APP_SLUG,
       email,
       source: SOURCE_TAG,
       consent: 1,
-      company: honey || "",
+      company: honey || "", // honeypot field (server ignores if filled)
     };
 
     const res = await fetch(WAITLIST_ENDPOINT, {
@@ -241,7 +255,9 @@
     const data = await safeReadJson(res);
 
     if (!res.ok || !data || data.ok !== true) {
-      const msg = (data && (data.error || data.message)) || `Request failed (${res.status})`;
+      const msg =
+        (data && (data.error || data.message)) ||
+        `Request failed (${res.status})`;
       throw new Error(msg);
     }
 
@@ -272,10 +288,10 @@
     // Footer year
     safeText(els.year, new Date().getFullYear());
 
-    // Load count once on page load
+    // Load waitlist count
     loadWaitlistCount();
 
-    // CSV button
+    // CSV button (lock icon in header)
     if (els.csvBtn) {
       els.csvBtn.type = "button";
       els.csvBtn.addEventListener("click", downloadCsvOwner);
@@ -314,7 +330,8 @@
     if (els.themeToggle) {
       els.themeToggle.type = "button";
       els.themeToggle.addEventListener("click", () => {
-        const isHigh = document.documentElement.getAttribute("data-contrast") === "high";
+        const isHigh =
+          document.documentElement.getAttribute("data-contrast") === "high";
         const nextHigh = !isHigh;
         applyContrast(nextHigh);
         try {
@@ -440,7 +457,7 @@
 
           // Refresh the counter after successful submit
           loadWaitlistCount();
-        } catch (err) {
+        } catch {
           showToast(
             "Signup didn’t go through. We’ll open your email app as a fallback.",
             false
