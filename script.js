@@ -8,6 +8,8 @@
 // - Reveal-on-scroll (.reveal -> .in)
 // - Early access form handling (SmashPro public waitlist endpoint + mailto fallback)
 // - Honeypot support (#company)
+// - Waitlist counter (reads from SmashPro)
+// - Owner CSV download (password prompt -> protected endpoint)
 
 (() => {
   "use strict";
@@ -15,13 +17,22 @@
   // =========================
   // CONFIG
   // =========================
-  // NOTE: March 03, 2026 10:00 PM Eastern Time.
-  // DST is in effect by then, so -05:00 is correct.
-  const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-053:00";
+  // NOTE: March 03, 2026 10:00 PM Eastern Time (Standard Time = -05:00)
+  const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-05:00";
 
   // SmashPro public waitlist endpoint (NO API KEY REQUIRED)
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
+
+  // (You will need to add this route server-side)
+  // Returns: { ok:true, app_slug:"...", count: 123 }
+  const WAITLIST_COUNT_ENDPOINT =
+    "https://smashpro.app/api/v1/index.php?path=public/waitlist/count";
+
+  // (You will need to add this route server-side)
+  // Returns a CSV file; requires password token
+  const WAITLIST_CSV_ENDPOINT =
+    "https://smashpro.app/api/v1/index.php?path=public/waitlist.csv";
 
   // Used by the waitlist allowlist server-side
   const APP_SLUG = "deeper-than-skin";
@@ -32,9 +43,12 @@
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
 
-  // Incentive copy (used in toast + mailto body)
   const INCENTIVE_LINE =
     "Bonus: Join the list for a chance to RSVP for our launch pop-up + early access perks.";
+
+  // Owner-password prompt label (do NOT hardcode the phone number in public JS)
+  const OWNER_PROMPT =
+    "Owner access: enter password (landing page owner phone number) to download CSV:";
 
   // =========================
   // DOM HELPERS
@@ -55,6 +69,10 @@
     email: $("email"),
     company: $("company"),
     toast: $("toast"),
+
+    // NEW
+    waitlistCount: $("waitlistCount"),
+    csvBtn: $("csvBtn"),
   };
 
   const pad2 = (n) => String(n).padStart(2, "0");
@@ -62,7 +80,6 @@
     if (el) el.textContent = String(txt);
   };
 
-  // Run after DOM is ready (safer for GitHub Pages + any partial loads)
   const onReady = (fn) => {
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", fn, { once: true });
@@ -110,12 +127,159 @@
     }
   }
 
+  async function safeReadJson(res) {
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    if (!ct.includes("application/json")) {
+      const text = await res.text().catch(() => "");
+      return { _text: text };
+    }
+    return await res.json().catch(() => ({}));
+  }
+
+  // =========================
+  // WAITLIST COUNT
+  // =========================
+  async function loadWaitlistCount() {
+    if (!els.waitlistCount) return;
+
+    // Default placeholder
+    safeText(els.waitlistCount, "—");
+
+    try {
+      const url = new URL(WAITLIST_COUNT_ENDPOINT);
+      url.searchParams.set("app_slug", APP_SLUG);
+
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+
+      const data = await safeReadJson(res);
+
+      if (!res.ok || data.ok !== true) {
+        // Fail silently (don’t spam the UI)
+        return;
+      }
+
+      const n = Number(data.count);
+      if (!Number.isFinite(n)) return;
+
+      safeText(els.waitlistCount, n.toLocaleString());
+    } catch {
+      // silent
+    }
+  }
+
+  // =========================
+  // OWNER CSV DOWNLOAD
+  // =========================
+  async function downloadCsvOwner() {
+    const pw = window.prompt(OWNER_PROMPT, "");
+    if (!pw) return;
+
+    try {
+      // Request a CSV file
+      const url = new URL(WAITLIST_CSV_ENDPOINT);
+      url.searchParams.set("app_slug", APP_SLUG);
+
+      // Send password as header (better than querystring)
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "text/csv",
+          "X-Owner-Password": pw,
+        },
+      });
+
+      if (!res.ok) {
+        let msg = `Download failed (${res.status})`;
+        // Try to parse JSON error
+        const data = await safeReadJson(res);
+        if (data && (data.error || data.message)) msg = data.error || data.message;
+        showToast(msg, false);
+        return;
+      }
+
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = URL.createObjectURL(blob);
+      a.download = `${APP_SLUG}-waitlist-${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+
+      showToast("CSV downloaded ✅", true);
+    } catch {
+      showToast("CSV download failed. Try again.", false);
+    }
+  }
+
+  // =========================
+  // WAITLIST SUBMIT
+  // =========================
+  async function submitToWaitlist(email, honey) {
+    // API expects company honeypot too (your public.waitlist.post checks it)
+    const payload = {
+      app_slug: APP_SLUG,
+      email,
+      source: SOURCE_TAG,
+      consent: 1,
+      company: honey || "",
+    };
+
+    const res = await fetch(WAITLIST_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await safeReadJson(res);
+
+    if (!res.ok || !data || data.ok !== true) {
+      const msg = (data && (data.error || data.message)) || `Request failed (${res.status})`;
+      throw new Error(msg);
+    }
+
+    return data; // { ok:true, created:bool, app_slug:... }
+  }
+
+  function mailtoFallback(email) {
+    const body =
+      `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
+      `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
+      `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
+      `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
+      `Source: ${encodeURIComponent(SOURCE_TAG)}%0D%0A%0D%0A` +
+      `Thanks!`;
+
+    const url =
+      `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
+      `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
+      `&body=${body}`;
+
+    window.location.href = url;
+  }
+
   // =========================
   // INIT
   // =========================
   onReady(() => {
     // Footer year
     safeText(els.year, new Date().getFullYear());
+
+    // Load count once on page load
+    loadWaitlistCount();
+
+    // CSV button
+    if (els.csvBtn) {
+      els.csvBtn.type = "button";
+      els.csvBtn.addEventListener("click", downloadCsvOwner);
+    }
 
     // =========================
     // CONTRAST TOGGLE
@@ -133,7 +297,6 @@
     }
 
     function applyContrast(isHigh) {
-      document.documentElement.toggleAttribute("data-contrast", isHigh);
       if (isHigh) {
         document.documentElement.setAttribute("data-contrast", "high");
       } else {
@@ -151,8 +314,7 @@
     if (els.themeToggle) {
       els.themeToggle.type = "button";
       els.themeToggle.addEventListener("click", () => {
-        const isHigh =
-          document.documentElement.getAttribute("data-contrast") === "high";
+        const isHigh = document.documentElement.getAttribute("data-contrast") === "high";
         const nextHigh = !isHigh;
         applyContrast(nextHigh);
         try {
@@ -200,7 +362,7 @@
 
       setCountdown(days, hours, mins, secs);
       safeText(els.badge, "Coming Soon");
-      safeText(els.label, "New experience begins March 10");
+      safeText(els.label, "New experience begins March 3");
     }
 
     tickCountdown();
@@ -236,60 +398,8 @@
     }
 
     // =========================
-    // FORM SUBMIT (SmashPro Waitlist)
+    // FORM SUBMIT
     // =========================
-    async function submitToWaitlist(email) {
-      const payload = {
-        app_slug: APP_SLUG,
-        email,
-        source: SOURCE_TAG,
-        consent: 1,
-        landing_origin: window.location.href, // extra field is fine
-        createdAt: new Date().toISOString(),  // extra field is fine
-      };
-
-      const res = await fetch(WAITLIST_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      // Try to parse JSON either way (your API returns JSON on errors)
-      let data = null;
-      try {
-        data = await res.json();
-      } catch {}
-
-      if (!res.ok || !data || data.ok !== true) {
-        const msg =
-          (data && (data.error || data.message)) ||
-          `Request failed (${res.status})`;
-        throw new Error(msg);
-      }
-
-      return data; // { ok:true, created:bool, app_slug:... }
-    }
-
-    function mailtoFallback(email) {
-      const body =
-        `Hi Deeper Than Skin team,%0D%0A%0D%0A` +
-        `Please add me to the Early Access list for the wellness relaunch.%0D%0A%0D%0A` +
-        `${encodeURIComponent(INCENTIVE_LINE)}%0D%0A%0D%0A` +
-        `Email: ${encodeURIComponent(email)}%0D%0A%0D%0A` +
-        `Source: ${encodeURIComponent(SOURCE_TAG)}%0D%0A%0D%0A` +
-        `Thanks!`;
-
-      const url =
-        `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
-        `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
-        `&body=${body}`;
-
-      window.location.href = url;
-    }
-
     if (els.form) {
       els.form.addEventListener("submit", async (ev) => {
         ev.preventDefault();
@@ -319,17 +429,18 @@
         }
 
         try {
-          const result = await submitToWaitlist(email);
+          const result = await submitToWaitlist(email, honey);
 
-          // created=false means “already exists but updated”, still a win
           const line = result.created
             ? "You’re in."
             : "You’re already on the list (we refreshed your entry).";
 
           showToast(`${line} ${INCENTIVE_LINE}`, true);
           try { els.form.reset(); } catch {}
+
+          // Refresh the counter after successful submit
+          loadWaitlistCount();
         } catch (err) {
-          // If API fails for any reason, we offer the mailto parachute
           showToast(
             "Signup didn’t go through. We’ll open your email app as a fallback.",
             false
