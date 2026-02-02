@@ -222,11 +222,24 @@
             We only email for launch updates and early access.
           </p>
 
+          <!-- NEW: Waitlist counter (script.js fills this) -->
+          <div class="waitlist-meta" aria-label="Waitlist status">
+            <span class="waitlist-count">
+              <strong id="waitlistCount">—</strong> people already joined
+            </span>
+            <span class="waitlist-dot" aria-hidden="true">•</span>
+            <span class="waitlist-app">Deeper Than Skin</span>
+          </div>
+
           <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+          <!-- NEW: Owner tools -->
           <div class="form-actions">
+            <button class="btn ghost w100" type="button" id="csvBtn">
+              Download CSV (Owner)
+            </button>
             <p class="hint">
-              Want real capture? Set a form endpoint in <code>script.js</code> (Formspree / Airtable / Supabase).
+              Owner-only: prompts for password.
             </p>
           </div>
         </form>
@@ -249,33 +262,22 @@
           </div>
         </a>
 
-        <!-- Replace # with the real link -->
         <a class="contact-card" href="https://instagram.com/deeperthanskin_llc" target="_blank" rel="noopener">
-  <div class="contact-ico" aria-hidden="true">
-    <img
-      class="social-ico"
-      src="https://www.svgrepo.com/download/494344/instagram.svg"
-      alt=""
-      loading="lazy"
-      referrerpolicy="no-referrer"
-    />
-  </div>
-  <div>
-    <div class="contact-title">Follow</div>
-    <div class="contact-sub">instagram.com/deeperthanskin_llc</div>
-  </div>
-</a>
-
-
-        <!-- Replace # with the real link -->
-         <!--<a class="contact-card" href="#" onclick="return false;">
-          <div class="contact-ico" aria-hidden="true">⎋</div>
+          <div class="contact-ico" aria-hidden="true">
+            <img
+              class="social-ico"
+              src="https://www.svgrepo.com/download/494344/instagram.svg"
+              alt=""
+              loading="lazy"
+              referrerpolicy="no-referrer"
+            />
+          </div>
           <div>
-            <div class="contact-title">Book</div>
-            <div class="contact-sub">Add booking link</div>
+            <div class="contact-title">Follow</div>
+            <div class="contact-sub">instagram.com/deeperthanskin_llc</div>
           </div>
         </a>
-      </div>-->
+      </div>
     </section>
 
     <!-- FOOTER -->
@@ -284,31 +286,31 @@
         <div class="foot-left">
           <div class="foot-brand">
             <img
-      class="credit-logo"
-      src="https://smashpro-digital.github.io/deeperthanskin-relaunch/assets/logo.png"
-      loading="lazy"
-      referrerpolicy="no-referrer"
-    />
+              class="credit-logo"
+              src="https://smashpro-digital.github.io/deeperthanskin-relaunch/assets/logo.png"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+              alt=""
+            />
             <span>Deeper Than Skin</span>
           </div>
+
           <p class="foot-note">
             © <span id="year"></span> Deeper Than Skin. All rights reserved.
           </p>
 
-          <!-- SmashPro credit: set data-credit="off" to hide -->
           <p class="credit" data-credit="on">
-  <a class="credit-link" href="https://dashboard.smashpro.app" target="_blank" rel="noopener">
-    <img
-      class="credit-logo"
-      src="https://smashpro.app/dashboard/assets/smashpro-bot-o95WwCXY.png"
-      alt="SmashPro Digital"
-      loading="lazy"
-      referrerpolicy="no-referrer"
-    />
-    SmashPro Digital
-  </a>.
-</p>
-
+            <a class="credit-link" href="https://dashboard.smashpro.app" target="_blank" rel="noopener">
+              <img
+                class="credit-logo"
+                src="https://smashpro.app/dashboard/assets/smashpro-bot-o95WwCXY.png"
+                alt="SmashPro Digital"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              SmashPro Digital
+            </a>.
+          </p>
         </div>
 
         <div class="foot-right">
