@@ -1,7 +1,7 @@
 // script.js — Deeper Than Skin Relaunch (GitHub Pages friendly)
 //
 // Features:
-// - Countdown (LOCKED: March 10, 2026 @ 10:00 AM ET)
+// - Countdown (LOCKED: March 03, 2026 @ 10:00 PM ET)
 // - Launch date label + status badge
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
