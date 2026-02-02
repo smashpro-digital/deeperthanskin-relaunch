@@ -15,9 +15,9 @@
   // =========================
   // CONFIG
   // =========================
-  // NOTE: March 10, 2026 10:00 AM Eastern Time.
-  // DST is in effect by then, so -04:00 is correct.
-  const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-03:00";
+  // NOTE: March 03, 2026 10:00 PM Eastern Time.
+  // DST is in effect by then, so -05:00 is correct.
+  const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-053:00";
 
   // SmashPro public waitlist endpoint (NO API KEY REQUIRED)
   const WAITLIST_ENDPOINT =
