@@ -1,7 +1,7 @@
 # deeperthanskin-relaunch
 
 🌐 **Live site:**  
-https://smashpro-digital.github.io/deeperthanskin-relaunch
+https://smashpro-digital.github.io/deeperthanskin-storefront
 
 A premium relaunch landing page for **Deeper Than Skin** as the brand transitions away from Shopify and returns with a **wellness-first focus**: internal health products plus a curated return of top-selling skincare essentials.
 
