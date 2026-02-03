@@ -1,9 +1,9 @@
-/* styles.css — Deeper Than Skin Relaunch (FULL DROP-IN)
-   - Consolidated duplicate credit styles
-   - Tightened contrast selector to :root[data-contrast="high"]
-   - Completed footer layout + mobile behavior
-   - Kept your tokens + glass + gradients intact
-   - Reveal animation + reduced-motion safety
+/* styles.css — Deeper Than Skin Relaunch
+   Polished for production:
+   - Stronger accessibility + focus handling
+   - Better mobile/touch behavior
+   - Fixes honeypot positioning edge case
+   - Keeps your original tokens, glass, gradients, and reveal motion
 */
 
 :root{
@@ -24,6 +24,8 @@
 
   --serif: "Fraunces", ui-serif, Georgia, serif;
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+
+  color-scheme: dark;
 }
 
 /* Contrast mode toggled by JS on <html> */
@@ -52,9 +54,14 @@ body{
 
 a{ color: inherit; text-decoration:none; }
 a:focus-visible, button:focus-visible, input:focus-visible{
-  outline: 3px solid rgba(125,224,192,.55);
+  outline: 3px solid rgba(125,224,192,.45);
   outline-offset: 3px;
   border-radius: 10px;
+}
+
+/* Improve tap behavior on touch devices */
+button, a, input{
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* =========================
@@ -69,6 +76,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   opacity:.20;
   pointer-events:none;
 }
+
 .waitlist-meta{
   display:flex;
   gap:10px;
@@ -355,6 +363,10 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   margin-top: 14px;
 }
 
+@media (max-width: 420px){
+  .countdown{ grid-template-columns: repeat(2, 1fr); }
+}
+
 .timebox{
   border-radius: var(--radius2);
   border: 1px solid rgba(255,255,255,.12);
@@ -367,6 +379,7 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   font-size: 26px;
   font-weight: 850;
   letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
 .lbl{
@@ -516,7 +529,10 @@ a:focus-visible, button:focus-visible, input:focus-visible{
   flex: 0 0 auto;
 }
 
-.form{ padding: 18px; }
+.form{
+  padding: 18px;
+  position: relative; /* ensures the honeypot absolute positioning never escapes */
+}
 
 .label{
   display:block;
@@ -542,6 +558,15 @@ input[type="email"]{
   color: var(--text);
   padding: 12px 12px;
   font-size: 15px;
+}
+
+input[type="email"]::placeholder{
+  color: rgba(255,255,255,.50);
+}
+
+input[type="email"]:focus-visible{
+  border-color: rgba(125,224,192,.35);
+  box-shadow: 0 0 0 4px rgba(125,224,192,.12);
 }
 
 .hp{
@@ -701,7 +726,7 @@ input[type="email"]{
 }
 
 /* =========================
-   SMASHPRO CREDIT (single source of truth)
+   SMASHPRO CREDIT
 ========================= */
 .credit{
   margin: 10px 0 0;
@@ -711,7 +736,6 @@ input[type="email"]{
 }
 .credit[data-credit="off"]{ display:none; }
 
-/* pill-style link that can include an <img class="credit-logo"> */
 .credit-link{
   display: inline-flex;
   align-items: center;
@@ -762,6 +786,13 @@ input[type="email"]{
 @media (prefers-reduced-motion: reduce){
   .reveal{ opacity:1; transform:none; transition:none; }
   .orb1, .orb2{ animation:none; }
+  .btn:hover, .tile:hover, .contact-card:hover, .foot-link:hover, .credit-link:hover{
+    transform:none;
+  }
+}
+
+/* Disable hover lift effects on touch devices to avoid “sticky hover” */
+@media (hover: none){
   .btn:hover, .tile:hover, .contact-card:hover, .foot-link:hover, .credit-link:hover{
     transform:none;
   }
