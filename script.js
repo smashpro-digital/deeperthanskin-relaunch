@@ -1,4 +1,4 @@
-// script.js — Deeper Than Skin Relaunch (production-ready, GitHub Pages friendly)
+// script.js — Deeper Than Skin Relaunch (FULL DROP-IN, production-ready, GitHub Pages friendly)
 //
 // Features:
 // - Countdown (March 03, 2026 @ 10:00 PM ET)
@@ -6,10 +6,15 @@
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
 // - Reveal-on-scroll (.reveal -> .in)
-// - Early access form -> SmashPro public waitlist endpoint + optional email fallback
+// - Early access form -> SmashPro public waitlist endpoint
+// - NEW: Email Service fallback (server-sent email) + optional mailto fallback
 // - Honeypot support (#company)
 // - Waitlist counter
 // - Owner CSV download (protected endpoint)
+//
+// Notes:
+// - Requests use Content-Type: text/plain to reduce CORS preflight issues.
+// - No API keys live in this repo. Email is sent server-side.
 
 (() => {
   "use strict";
@@ -28,17 +33,32 @@
   const WAITLIST_CSV_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/csv";
 
+  // NEW: server-side email fallback endpoint (NO secrets in JS)
+  // Your API should accept the payload and send an email via SendGrid/SMTP on the server.
+  const EMAIL_SERVICE_ENDPOINT =
+    "https://smashpro.app/api/v1/index.php?path=public/contact";
+
   const APP_SLUG = "deeper-than-skin";
   const SOURCE_TAG = "dts-relaunch";
 
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
 
-  // Optional: if you want to pass a dynamic display name to your API
-  // (server can ignore if unused)
+  // Optional: display label passed to API (server may ignore)
   const FROM_NAME = "Deeper Than Skin";
 
-  // Customer-facing copy
+  // Fallback behavior:
+  // - "service": try server email service only (recommended)
+  // - "mailto": open mail app on failure
+  // - "both": try service, then mailto if service fails
+  const FALLBACK_MODE = "service";
+
+  // If true, mailto will open automatically (only applies if FALLBACK_MODE includes mailto)
+  const AUTO_OPEN_MAIL_FALLBACK = false;
+
+  // =========================
+  // COPY
+  // =========================
   const COPY = {
     incentive:
       "Bonus: Join the list for a chance to RSVP for our launch pop-up and early access perks.",
@@ -51,7 +71,11 @@
     invalidEmail:
       "Please enter a valid email address.",
     genericError:
-      "We couldn’t add you right now. You can still join by email.",
+      "We couldn’t add you right now. Please try again.",
+    fallbackQueued:
+      "We couldn’t add you instantly, but we saved your request ✅ You’ll hear from us soon.",
+    fallbackFailed:
+      "We couldn’t submit your request automatically. You can still join by email.",
     ownerPrompt:
       "Owner tools: enter access code to download the CSV:",
     ownerShort:
@@ -61,10 +85,6 @@
     csvOk:
       "Download started 🔒",
   };
-
-  // If you want the old behavior (auto-open mail app on failure),
-  // set this to true:
-  const AUTO_OPEN_MAIL_FALLBACK = false;
 
   // =========================
   // DOM HELPERS
@@ -154,12 +174,10 @@
     return t.length > max ? t.slice(0, max) + "…" : t;
   }
 
-  // Light validation: avoids false negatives but blocks obvious mistakes
   function isValidEmail(email) {
     const e = String(email || "").trim();
     if (e.length < 6) return false;
     if (!e.includes("@")) return false;
-    // Basic "something@something.tld" shape
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   }
 
@@ -251,7 +269,6 @@
   // =========================
   // WAITLIST SUBMIT
   // =========================
-  // Uses Content-Type: text/plain to avoid CORS preflight in most cases.
   async function submitToWaitlist(email, honey) {
     const payload = {
       app_slug: APP_SLUG,
@@ -259,9 +276,7 @@
       source: SOURCE_TAG,
       consent: 1,
       company: honey || "",
-
-      // Optional: supports dynamic display name use server-side
-      from_name: FROM_NAME,
+      from_name: FROM_NAME, // optional
     };
 
     const res = await fetch(WAITLIST_ENDPOINT, {
@@ -286,6 +301,51 @@
     return data; // { ok:true, created:bool, email_sent?:bool }
   }
 
+  // =========================
+  // NEW: EMAIL SERVICE FALLBACK (server-side)
+  // =========================
+  // This is NOT SendGrid directly (no secrets in JS).
+  // Your server endpoint should:
+  // - validate + rate-limit
+  // - send via SendGrid/SMTP using server env vars
+  // - return { ok:true } on success
+  async function submitToEmailService(email) {
+    const payload = {
+      app_slug: APP_SLUG,
+      source: SOURCE_TAG,
+      email,
+      // Let the server decide actual From; this is only display copy if you want it
+      from_name: FROM_NAME,
+      // Provide a clear intent so server can choose template/subject
+      intent: "early_access",
+      message: `Please add me to the Deeper Than Skin early access list. Source: ${SOURCE_TAG}.`,
+    };
+
+    const res = await fetch(EMAIL_SERVICE_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=UTF-8",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await safeReadJson(res);
+
+    if (!res.ok || !data || data.ok !== true) {
+      const detail =
+        (data && (data.error || data.message)) ||
+        (data && data._text ? compactText(data._text) : "") ||
+        `Email service failed (${res.status})`;
+      throw new Error(detail);
+    }
+
+    return data;
+  }
+
+  // =========================
+  // MAILTO FALLBACK (optional)
+  // =========================
   function buildMailto(email) {
     const bodyRaw =
       `Hi Deeper Than Skin team,\n\n` +
@@ -304,6 +364,32 @@
 
   function openMailFallback(email) {
     window.location.href = buildMailto(email);
+  }
+
+  async function runFallback(email) {
+    const mode = String(FALLBACK_MODE || "").toLowerCase();
+
+    const tryService = mode === "service" || mode === "both";
+    const tryMailto = mode === "mailto" || mode === "both";
+
+    if (tryService) {
+      try {
+        await submitToEmailService(email);
+        return { ok: true, via: "service" };
+      } catch (e) {
+        console.error("[fallback] email service error:", e);
+        // continue to mailto if allowed
+      }
+    }
+
+    if (tryMailto) {
+      if (AUTO_OPEN_MAIL_FALLBACK) {
+        window.setTimeout(() => openMailFallback(email), 350);
+      }
+      return { ok: false, via: "mailto" };
+    }
+
+    return { ok: false, via: "none" };
   }
 
   // =========================
@@ -331,8 +417,8 @@
       if (!els.themeToggle) return;
       els.themeToggle.setAttribute("aria-pressed", String(isHigh));
       els.themeToggle.title = isHigh
-        ? "High contrast (click to switch)"
-        : "Contrast (click to switch)";
+        ? "High contrast"
+        : "Contrast";
       const span = els.themeToggle.querySelector("span");
       if (span) span.textContent = isHigh ? "◑" : "◐";
     }
@@ -446,7 +532,7 @@
         const email = (els.email?.value || "").trim();
         const honey = (els.company?.value || "").trim();
 
-        // Honeypot: if filled, quietly act like success
+        // Honeypot: if filled, quietly succeed
         if (honey) {
           showToast(COPY.success, true);
           try { els.form.reset(); } catch {}
@@ -475,31 +561,31 @@
             typeof result.email_sent === "boolean" ? result.email_sent : null;
 
           const lead = created ? COPY.success : COPY.alreadyOnList;
-
           const confirmLine =
-            emailSent === false
-              ? lead
-              : (emailSent === true ? COPY.successWithConfirm : lead);
+            emailSent === true ? COPY.successWithConfirm : lead;
 
           showToast(`${confirmLine} ${COPY.incentive}`, true);
           try { els.form.reset(); } catch {}
-
           loadWaitlistCount();
         } catch (err) {
-          // Keep diagnostics for you (console), but keep the UI calm
           console.error("[waitlist] submit error:", err);
 
-          showToast(COPY.genericError, false);
+          // NEW: try the server-side email service fallback
+          const fb = await runFallback(email);
 
-          if (AUTO_OPEN_MAIL_FALLBACK) {
-            window.setTimeout(() => openMailFallback(email), 450);
+          if (fb.ok && fb.via === "service") {
+            showToast(`${COPY.fallbackQueued} ${COPY.incentive}`, true);
+            try { els.form.reset(); } catch {}
+            return;
+          }
+
+          // If we’re not auto-opening mail, show a helpful message and keep user in control
+          if (!AUTO_OPEN_MAIL_FALLBACK && (String(FALLBACK_MODE).toLowerCase() === "mailto" || String(FALLBACK_MODE).toLowerCase() === "both")) {
+            showToast(COPY.fallbackFailed, false);
+            // Provide a copyable fallback in console (useful for debugging)
+            console.info("[fallback] mailto link:", buildMailto(email));
           } else {
-            // Gentle, user-controlled fallback: focus stays put
-            // If you want a visible button, we can add one in HTML.
-            const mailto = buildMailto(email);
-            // Add a clickable hint in the console for quick debugging
-            console.info("[waitlist] mailto fallback:", mailto);
-            // Optional: you can swap toast text to instruct “tap Contact below”
+            showToast(COPY.fallbackFailed, false);
           }
         } finally {
           els.form.removeAttribute("aria-busy");
