@@ -1,21 +1,15 @@
-// script.js — Deeper Than Skin Relaunch (GitHub Pages friendly)
+// script.js — Deeper Than Skin Relaunch (production-ready, GitHub Pages friendly)
 //
 // Features:
-// - Countdown (LOCKED: March 03, 2026 @ 10:00 PM ET)
+// - Countdown (March 03, 2026 @ 10:00 PM ET)
 // - Launch date label + status badge
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
 // - Reveal-on-scroll (.reveal -> .in)
-// - Early access form handling (SmashPro public waitlist endpoint + mailto fallback)
+// - Early access form -> SmashPro public waitlist endpoint + optional email fallback
 // - Honeypot support (#company)
-// - Waitlist counter (reads from SmashPro)
-// - Owner CSV download (password prompt -> protected endpoint)
-//
-// IMPORTANT UPDATE:
-// - Waitlist POST now uses Content-Type: text/plain to avoid CORS preflight
-//   (reduces "Signup didn’t go through" caused by OPTIONS failures)
-// - Better error visibility via console + toast detail fallback
-// - Success message mentions confirmation email (server must send it)
+// - Waitlist counter
+// - Owner CSV download (protected endpoint)
 
 (() => {
   "use strict";
@@ -23,40 +17,54 @@
   // =========================
   // CONFIG
   // =========================
-  // NOTE: March 03, 2026 10:00 PM Eastern Time (Standard Time = -05:00)
   const LAUNCH_DATE_ISO = "2026-03-03T22:00:00-05:00";
 
-  // SmashPro public waitlist endpoint (NO API KEY REQUIRED)
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
 
-  // Returns: { ok:true, app_slug:"...", count: 123 }
   const WAITLIST_COUNT_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/count";
 
-  // Returns a CSV file; requires owner password
   const WAITLIST_CSV_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/csv";
 
-  // Used by the waitlist allowlist server-side
   const APP_SLUG = "deeper-than-skin";
-
-  // Tracking/source string stored in DB (spd_waitlist.source)
   const SOURCE_TAG = "dts-relaunch";
 
   const CONTACT_EMAIL = "info@deeperthanskin.store";
   const MAILTO_SUBJECT = "Deeper Than Skin – Early Access";
 
-  const INCENTIVE_LINE =
-    "Bonus: Join the list for a chance to RSVP for our launch pop-up + early access perks.";
+  // Optional: if you want to pass a dynamic display name to your API
+  // (server can ignore if unused)
+  const FROM_NAME = "Deeper Than Skin";
 
-  // Owner-password prompt label (do NOT hardcode the phone number in public JS)
-  const OWNER_PROMPT =
-    "Owner access: enter password (landing page owner phone number) to download CSV:";
+  // Customer-facing copy
+  const COPY = {
+    incentive:
+      "Bonus: Join the list for a chance to RSVP for our launch pop-up and early access perks.",
+    success:
+      "You’re on the list ✅ Keep an eye on your inbox for updates.",
+    successWithConfirm:
+      "You’re on the list ✅ Check your inbox for a quick confirmation.",
+    alreadyOnList:
+      "You’re already on the list ✅ We’ll keep you posted.",
+    invalidEmail:
+      "Please enter a valid email address.",
+    genericError:
+      "We couldn’t add you right now. You can still join by email.",
+    ownerPrompt:
+      "Owner tools: enter access code to download the CSV:",
+    ownerShort:
+      "That code doesn’t look quite right.",
+    csvEmpty:
+      "No data returned. Please try again.",
+    csvOk:
+      "Download started 🔒",
+  };
 
-  // Copy for success states
-  const CONFIRM_LINE =
-    "You’ve been added ✅ Check your inbox for a confirmation email.";
+  // If you want the old behavior (auto-open mail app on failure),
+  // set this to true:
+  const AUTO_OPEN_MAIL_FALLBACK = false;
 
   // =========================
   // DOM HELPERS
@@ -77,15 +85,12 @@
     email: $("email"),
     company: $("company"),
     toast: $("toast"),
-
     waitlistCount: $("waitlistCount"),
     csvBtn: $("csvBtn"),
   };
 
   const pad2 = (n) => String(n).padStart(2, "0");
-  const safeText = (el, txt) => {
-    if (el) el.textContent = String(txt);
-  };
+  const safeText = (el, txt) => { if (el) el.textContent = String(txt); };
 
   const onReady = (fn) => {
     if (document.readyState === "loading") {
@@ -102,13 +107,13 @@
 
     els.toast.style.borderColor = ok
       ? "rgba(125,224,192,.25)"
-      : "rgba(255,120,120,.25)";
+      : "rgba(255,160,160,.22)";
     els.toast.style.background = ok
       ? "rgba(125,224,192,.06)"
       : "rgba(255,120,120,.06)";
     els.toast.style.color = ok
-      ? "rgba(255,255,255,.85)"
-      : "rgba(255,200,200,.92)";
+      ? "rgba(255,255,255,.88)"
+      : "rgba(255,225,225,.94)";
   }
 
   function hideToast() {
@@ -149,6 +154,15 @@
     return t.length > max ? t.slice(0, max) + "…" : t;
   }
 
+  // Light validation: avoids false negatives but blocks obvious mistakes
+  function isValidEmail(email) {
+    const e = String(email || "").trim();
+    if (e.length < 6) return false;
+    if (!e.includes("@")) return false;
+    // Basic "something@something.tld" shape
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  }
+
   // =========================
   // WAITLIST COUNT
   // =========================
@@ -181,12 +195,12 @@
   // OWNER CSV DOWNLOAD
   // =========================
   async function downloadCsvOwner() {
-    const pw = window.prompt(OWNER_PROMPT, "");
-    if (!pw) return;
+    const code = window.prompt(COPY.ownerPrompt, "");
+    if (!code) return;
 
-    const pwClean = String(pw).trim();
-    if (pwClean.length < 4) {
-      showToast("Password looks too short.", false);
+    const codeClean = String(code).trim();
+    if (codeClean.length < 4) {
+      showToast(COPY.ownerShort, false);
       return;
     }
 
@@ -198,21 +212,22 @@
         method: "GET",
         headers: {
           Accept: "text/csv",
-          "X-Owner-Password": pwClean,
+          "X-Owner-Password": codeClean,
         },
       });
 
       if (!res.ok) {
-        let msg = `Download failed (${res.status})`;
         const data = await safeReadJson(res);
-        if (data && (data.error || data.message)) msg = data.error || data.message;
-        showToast(msg, false);
+        const msg =
+          (data && (data.error || data.message)) ||
+          `Access denied (${res.status})`;
+        showToast(compactText(msg), false);
         return;
       }
 
       const blob = await res.blob();
       if (!blob || blob.size === 0) {
-        showToast("CSV was empty (no data returned).", false);
+        showToast(COPY.csvEmpty, false);
         return;
       }
 
@@ -227,31 +242,31 @@
       a.remove();
       URL.revokeObjectURL(a.href);
 
-      showToast("CSV downloaded 🔒✅", true);
+      showToast(COPY.csvOk, true);
     } catch {
-      showToast("CSV download failed. Try again.", false);
+      showToast("Download didn’t complete. Please try again.", false);
     }
   }
 
   // =========================
   // WAITLIST SUBMIT
   // =========================
-
-  // IMPORTANT: Use text/plain to avoid CORS preflight (OPTIONS).
-  // Server should read php://input and json_decode regardless of content-type.
+  // Uses Content-Type: text/plain to avoid CORS preflight in most cases.
   async function submitToWaitlist(email, honey) {
     const payload = {
       app_slug: APP_SLUG,
       email,
       source: SOURCE_TAG,
       consent: 1,
-      company: honey || "", // honeypot field (server ignores if filled)
+      company: honey || "",
+
+      // Optional: supports dynamic display name use server-side
+      from_name: FROM_NAME,
     };
 
     const res = await fetch(WAITLIST_ENDPOINT, {
       method: "POST",
       headers: {
-        // "simple" request (no preflight in most browsers)
         "Content-Type": "text/plain;charset=UTF-8",
         Accept: "application/json",
       },
@@ -268,24 +283,27 @@
       throw new Error(detail);
     }
 
-    return data; // { ok:true, created:bool, app_slug:... , email_sent?:bool }
+    return data; // { ok:true, created:bool, email_sent?:bool }
   }
 
-  function mailtoFallback(email) {
+  function buildMailto(email) {
     const bodyRaw =
       `Hi Deeper Than Skin team,\n\n` +
-      `Please add me to the Early Access list for the wellness relaunch.\n\n` +
-      `${INCENTIVE_LINE}\n\n` +
-      `Email: ${email}\n\n` +
+      `Please add me to the Early Access list for the relaunch.\n\n` +
+      `${COPY.incentive}\n\n` +
+      `Email: ${email}\n` +
       `Source: ${SOURCE_TAG}\n\n` +
-      `Thanks!`;
+      `Thank you.`;
 
-    const url =
+    return (
       `mailto:${encodeURIComponent(CONTACT_EMAIL)}` +
       `?subject=${encodeURIComponent(MAILTO_SUBJECT)}` +
-      `&body=${encodeURIComponent(bodyRaw)}`;
+      `&body=${encodeURIComponent(bodyRaw)}`
+    );
+  }
 
-    window.location.href = url;
+  function openMailFallback(email) {
+    window.location.href = buildMailto(email);
   }
 
   // =========================
@@ -313,8 +331,8 @@
       if (!els.themeToggle) return;
       els.themeToggle.setAttribute("aria-pressed", String(isHigh));
       els.themeToggle.title = isHigh
-        ? "Contrast: High (click to disable)"
-        : "Contrast: Normal (click to enable)";
+        ? "High contrast (click to switch)"
+        : "Contrast (click to switch)";
       const span = els.themeToggle.querySelector("span");
       if (span) span.textContent = isHigh ? "◑" : "◐";
     }
@@ -329,9 +347,7 @@
     }
 
     let savedMode = "normal";
-    try {
-      savedMode = localStorage.getItem(STORAGE_KEY) || "normal";
-    } catch {}
+    try { savedMode = localStorage.getItem(STORAGE_KEY) || "normal"; } catch {}
     applyContrast(savedMode === "high");
 
     if (els.themeToggle) {
@@ -341,9 +357,7 @@
           document.documentElement.getAttribute("data-contrast") === "high";
         const nextHigh = !isHigh;
         applyContrast(nextHigh);
-        try {
-          localStorage.setItem(STORAGE_KEY, nextHigh ? "high" : "normal");
-        } catch {}
+        try { localStorage.setItem(STORAGE_KEY, nextHigh ? "high" : "normal"); } catch {}
       });
     }
 
@@ -364,7 +378,7 @@
       if (!Number.isFinite(targetMs)) {
         setCountdown("--", "--", "--", "--");
         safeText(els.badge, "Coming Soon");
-        safeText(els.label, "Launch date TBD");
+        safeText(els.label, "New experience coming soon");
         return;
       }
 
@@ -386,7 +400,7 @@
 
       setCountdown(days, hours, mins, secs);
       safeText(els.badge, "Coming Soon");
-      safeText(els.label, "New experience begins March 3");
+      safeText(els.label, "New experience launches March 3");
     }
 
     tickCountdown();
@@ -432,15 +446,15 @@
         const email = (els.email?.value || "").trim();
         const honey = (els.company?.value || "").trim();
 
-        // Honeypot: if filled, silently "succeed"
+        // Honeypot: if filled, quietly act like success
         if (honey) {
-          showToast(CONFIRM_LINE, true);
+          showToast(COPY.success, true);
           try { els.form.reset(); } catch {}
           return;
         }
 
-        if (!email || !email.includes("@")) {
-          showToast("Please enter a valid email address.", false);
+        if (!isValidEmail(email)) {
+          showToast(COPY.invalidEmail, false);
           els.email?.focus?.();
           return;
         }
@@ -449,40 +463,46 @@
         const prevText = btn ? btn.textContent : "";
         if (btn) {
           btn.disabled = true;
-          btn.textContent = "Adding...";
+          btn.textContent = "Adding…";
         }
+        els.form.setAttribute("aria-busy", "true");
 
         try {
           const result = await submitToWaitlist(email, honey);
 
-          // If your server returns email_sent, we can tailor the copy:
+          const created = !!result.created;
           const emailSent =
             typeof result.email_sent === "boolean" ? result.email_sent : null;
 
-          const lead = result.created
-            ? "You’re in."
-            : "You’re already on the list (we refreshed your entry).";
+          const lead = created ? COPY.success : COPY.alreadyOnList;
 
-          const confirmPart =
+          const confirmLine =
             emailSent === false
-              ? "Added ✅ (Confirmation email may be delayed.)"
-              : CONFIRM_LINE;
+              ? lead
+              : (emailSent === true ? COPY.successWithConfirm : lead);
 
-          showToast(`${lead} ${confirmPart} ${INCENTIVE_LINE}`, true);
+          showToast(`${confirmLine} ${COPY.incentive}`, true);
           try { els.form.reset(); } catch {}
 
-          // Refresh the counter after successful submit
           loadWaitlistCount();
         } catch (err) {
-          // Better diagnostics for you
-          console.error("[waitlist] signup failed:", err);
+          // Keep diagnostics for you (console), but keep the UI calm
+          console.error("[waitlist] submit error:", err);
 
-          showToast(
-            "Signup didn’t go through. We’ll open your email app as a fallback.",
-            false
-          );
-          window.setTimeout(() => mailtoFallback(email), 450);
+          showToast(COPY.genericError, false);
+
+          if (AUTO_OPEN_MAIL_FALLBACK) {
+            window.setTimeout(() => openMailFallback(email), 450);
+          } else {
+            // Gentle, user-controlled fallback: focus stays put
+            // If you want a visible button, we can add one in HTML.
+            const mailto = buildMailto(email);
+            // Add a clickable hint in the console for quick debugging
+            console.info("[waitlist] mailto fallback:", mailto);
+            // Optional: you can swap toast text to instruct “tap Contact below”
+          }
         } finally {
+          els.form.removeAttribute("aria-busy");
           if (btn) {
             btn.disabled = false;
             btn.textContent = prevText || "Notify me";
