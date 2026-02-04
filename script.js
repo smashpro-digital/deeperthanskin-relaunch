@@ -73,7 +73,7 @@
     genericError:
       "We couldn’t add you right now. Please try again.",
     fallbackQueued:
-      "We couldn’t add you instantly, but we saved your request ✅ You’ll hear from us soon.",
+      "We received your request ✅ Check your inbox for a confirmation.",
     fallbackFailed:
       "We couldn’t submit your request automatically. You can still join by email.",
     ownerPrompt:
@@ -318,6 +318,7 @@
       from_name: FROM_NAME,
       // Provide a clear intent so server can choose template/subject
       intent: "early_access",
+      subject: MAILTO_SUBJECT, // or "Early access"
       message: `Please add me to the Deeper Than Skin early access list. Source: ${SOURCE_TAG}.`,
     };
 
