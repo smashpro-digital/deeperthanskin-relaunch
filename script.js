@@ -7,14 +7,15 @@
 // - Contrast toggle (data-contrast="high") with localStorage persistence
 // - Reveal-on-scroll (.reveal -> .in)
 // - Early access form -> SmashPro public waitlist endpoint
-// - NEW: Email Service fallback (server-sent email) + optional mailto fallback
+// - Email Service fallback (server-sent email) + optional mailto fallback
 // - Honeypot support (#company)
 // - Waitlist counter
-// - Owner CSV download (protected endpoint)
+// - Owner CSV download (PIN via QUERY PARAM to avoid CORS preflight)
 //
 // Notes:
 // - Requests use Content-Type: text/plain to reduce CORS preflight issues.
 // - No API keys live in this repo. Email is sent server-side.
+// - IMPORTANT FIX: CSV download now uses ?pin=#### (no custom headers) to avoid OPTIONS 500 on shared hosting.
 
 (() => {
   "use strict";
@@ -33,8 +34,7 @@
   const WAITLIST_CSV_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist/csv";
 
-  // NEW: server-side email fallback endpoint (NO secrets in JS)
-  // Your API should accept the payload and send an email via SendGrid/SMTP on the server.
+  // server-side email fallback endpoint (NO secrets in JS)
   const EMAIL_SERVICE_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/contact";
 
@@ -84,6 +84,8 @@
       "No data returned. Please try again.",
     csvOk:
       "Download started 🔒",
+    csvDenied:
+      "Access denied. Check your access code and try again.",
   };
 
   // =========================
@@ -210,8 +212,11 @@
   }
 
   // =========================
-  // OWNER CSV DOWNLOAD
+  // OWNER CSV DOWNLOAD (NO PREFLIGHT)
   // =========================
+  // Shared-host fix:
+  // - DO NOT send X-Owner-Password header from browser (triggers OPTIONS preflight)
+  // - Use query param ?pin=#### instead and trigger download via navigation
   async function downloadCsvOwner() {
     const code = window.prompt(COPY.ownerPrompt, "");
     if (!code) return;
@@ -225,44 +230,39 @@
     try {
       const url = new URL(WAITLIST_CSV_ENDPOINT);
       url.searchParams.set("app_slug", APP_SLUG);
+      url.searchParams.set("pin", codeClean); // ✅ query param avoids CORS preflight
 
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          Accept: "text/csv",
-          "X-Owner-Password": codeClean,
-        },
-      });
-
-      if (!res.ok) {
-        const data = await safeReadJson(res);
-        const msg =
-          (data && (data.error || data.message)) ||
-          `Access denied (${res.status})`;
-        showToast(compactText(msg), false);
-        return;
+      // Optional quick "auth check" without headers (still no preflight).
+      // If server returns 401/403 JSON, show a toast and DO NOT navigate.
+      // If it returns CSV, we proceed to download by navigation.
+      //
+      // NOTE: Some hosts may still block fetch for CSV; navigation is the most reliable.
+      let canDownload = true;
+      try {
+        const probe = await fetch(url.toString(), { method: "GET" });
+        if (!probe.ok) {
+          const data = await safeReadJson(probe);
+          const msg =
+            (data && (data.error || data.message)) ||
+            `Access denied (${probe.status})`;
+          showToast(compactText(msg) || COPY.csvDenied, false);
+          canDownload = false;
+        } else {
+          // If it's CSV, we don't need to read it here; we'll navigate for a real download
+          canDownload = true;
+        }
+      } catch {
+        // If probe fails (some browsers/hosts), still attempt navigation
+        canDownload = true;
       }
 
-      const blob = await res.blob();
-      if (!blob || blob.size === 0) {
-        showToast(COPY.csvEmpty, false);
-        return;
-      }
-
-      const stamp = new Date().toISOString().slice(0, 10);
-      const filename = `${APP_SLUG}-waitlist-${stamp}.csv`;
-
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+      if (!canDownload) return;
 
       showToast(COPY.csvOk, true);
-    } catch {
-      showToast("Download didn’t complete. Please try again.", false);
+      window.location.href = url.toString(); // ✅ starts download reliably
+    } catch (e) {
+      console.error("[csv] download error:", e);
+      showToast("Download didn’t start. Please try again.", false);
     }
   }
 
@@ -302,23 +302,16 @@
   }
 
   // =========================
-  // NEW: EMAIL SERVICE FALLBACK (server-side)
+  // EMAIL SERVICE FALLBACK (server-side)
   // =========================
-  // This is NOT SendGrid directly (no secrets in JS).
-  // Your server endpoint should:
-  // - validate + rate-limit
-  // - send via SendGrid/SMTP using server env vars
-  // - return { ok:true } on success
   async function submitToEmailService(email) {
     const payload = {
       app_slug: APP_SLUG,
       source: SOURCE_TAG,
       email,
-      // Let the server decide actual From; this is only display copy if you want it
       from_name: FROM_NAME,
-      // Provide a clear intent so server can choose template/subject
       intent: "early_access",
-      subject: MAILTO_SUBJECT, // or "Early access"
+      subject: MAILTO_SUBJECT,
       message: `Please add me to the Deeper Than Skin early access list. Source: ${SOURCE_TAG}.`,
     };
 
@@ -379,7 +372,6 @@
         return { ok: true, via: "service" };
       } catch (e) {
         console.error("[fallback] email service error:", e);
-        // continue to mailto if allowed
       }
     }
 
@@ -417,9 +409,7 @@
     function setButtonState(isHigh) {
       if (!els.themeToggle) return;
       els.themeToggle.setAttribute("aria-pressed", String(isHigh));
-      els.themeToggle.title = isHigh
-        ? "High contrast"
-        : "Contrast";
+      els.themeToggle.title = isHigh ? "High contrast" : "Contrast";
       const span = els.themeToggle.querySelector("span");
       if (span) span.textContent = isHigh ? "◑" : "◐";
     }
@@ -440,8 +430,7 @@
     if (els.themeToggle) {
       els.themeToggle.type = "button";
       els.themeToggle.addEventListener("click", () => {
-        const isHigh =
-          document.documentElement.getAttribute("data-contrast") === "high";
+        const isHigh = document.documentElement.getAttribute("data-contrast") === "high";
         const nextHigh = !isHigh;
         applyContrast(nextHigh);
         try { localStorage.setItem(STORAGE_KEY, nextHigh ? "high" : "normal"); } catch {}
@@ -562,8 +551,7 @@
             typeof result.email_sent === "boolean" ? result.email_sent : null;
 
           const lead = created ? COPY.success : COPY.alreadyOnList;
-          const confirmLine =
-            emailSent === true ? COPY.successWithConfirm : lead;
+          const confirmLine = emailSent === true ? COPY.successWithConfirm : lead;
 
           showToast(`${confirmLine} ${COPY.incentive}`, true);
           try { els.form.reset(); } catch {}
@@ -571,7 +559,7 @@
         } catch (err) {
           console.error("[waitlist] submit error:", err);
 
-          // NEW: try the server-side email service fallback
+          // Try server-side email service fallback
           const fb = await runFallback(email);
 
           if (fb.ok && fb.via === "service") {
@@ -580,10 +568,13 @@
             return;
           }
 
-          // If we’re not auto-opening mail, show a helpful message and keep user in control
-          if (!AUTO_OPEN_MAIL_FALLBACK && (String(FALLBACK_MODE).toLowerCase() === "mailto" || String(FALLBACK_MODE).toLowerCase() === "both")) {
+          // Optional mailto guidance
+          if (
+            !AUTO_OPEN_MAIL_FALLBACK &&
+            (String(FALLBACK_MODE).toLowerCase() === "mailto" ||
+              String(FALLBACK_MODE).toLowerCase() === "both")
+          ) {
             showToast(COPY.fallbackFailed, false);
-            // Provide a copyable fallback in console (useful for debugging)
             console.info("[fallback] mailto link:", buildMailto(email));
           } else {
             showToast(COPY.fallbackFailed, false);
