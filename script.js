@@ -23,7 +23,7 @@
   // =========================
   // CONFIG
   // =========================
-  const LAUNCH_DATE_ISO = "2026-03-22T22:00:00-05:00";
+  const LAUNCH_DATE_ISO = "2026-03-22T22:00:00-03:00";
 
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
