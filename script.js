@@ -476,7 +476,7 @@
 
       setCountdown(days, hours, mins, secs);
       safeText(els.badge, "Coming Soon");
-      safeText(els.label, "New experience launches March 3");
+      safeText(els.label, "New experience launches March 22");
     }
 
     tickCountdown();
