@@ -1,7 +1,7 @@
 // script.js — Deeper Than Skin Relaunch (FULL DROP-IN, production-ready, GitHub Pages friendly)
 //
 // Features:
-// - Countdown (March 22, 2026 @ 10:00 PM ET)
+// - Countdown (April 5, 2026 @ 7:00 PM ET)
 // - Launch date label + status badge
 // - Footer year
 // - Contrast toggle (data-contrast="high") with localStorage persistence
@@ -23,7 +23,7 @@
   // =========================
   // CONFIG
   // =========================
-  const LAUNCH_DATE_ISO = "2026-03-22T22:00:00-03:00";
+  const LAUNCH_DATE_ISO = "2026-04-05T22:00:00-02:00";
 
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
