@@ -23,7 +23,7 @@
   // =========================
   // CONFIG
   // =========================
-  const LAUNCH_DATE_ISO = "2026-04-05T21:00:00-02:00";
+  const LAUNCH_DATE_ISO = "2026-04-05T19:00:00-00:00";
 
   const WAITLIST_ENDPOINT =
     "https://smashpro.app/api/v1/index.php?path=public/waitlist";
@@ -476,7 +476,7 @@
 
       setCountdown(days, hours, mins, secs);
       safeText(els.badge, "Coming Soon");
-      safeText(els.label, "New experience launches March 22");
+      safeText(els.label, "New experience launches April 5");
     }
 
     tickCountdown();
